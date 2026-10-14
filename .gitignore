@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+dist/
+build/
+.cache/
+.env*
+!.env.example
+*.tsbuildinfo
+
+# Generated Prisma Client (recreate with `pnpm db:generate`).
+src/generated/
+*-debug.log*
+logs/
+*.log
+.tmp-*

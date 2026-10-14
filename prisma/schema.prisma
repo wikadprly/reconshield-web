@@ -1,0 +1,120 @@
+// ReconShield schema (PostgreSQL).
+//
+// Scaffolded for research purposes. No migration has been applied and no seed
+// data is included yet. Fields mirror the domain types in src/types/security.ts
+// and the mock dataset in src/data/mock-security.ts. Do not add invented ML
+// fields or metrics that are not produced by the Python service.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// A classified network flow / incident.
+model Detection {
+  id              String   @id
+  timestamp       DateTime
+  sourceIp        String
+  sourcePort      Int
+  destinationIp   String
+  destinationPort Int
+  classification  String
+  confidence      Float
+  action          String
+  status          String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([timestamp])
+  @@index([sourceIp])
+  @@map("detections")
+}
+
+/// An address currently under Dynamic Tarpit mitigation.
+model TarpitEntry {
+  id          String    @id @default(cuid())
+  ip          String    @unique
+  detectedAt  DateTime
+  duration    String
+  addressList String
+  status      String
+  releasedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("tarpit_entries")
+}
+
+/// Status of an external dependency (MikroTik RouterOS, Random Forest service).
+model ServiceStatus {
+  name      String   @id
+  detail    String
+  status    String
+  checkedAt DateTime @default(now())
+
+  @@map("service_statuses")
+}
+
+/// Immutable administrator policy-change record.
+model AuditEntry {
+  id           String   @id @default(cuid())
+  timestamp    DateTime
+  administrator String
+  previousMode String
+  newMode      String
+  reason       String?
+  createdAt    DateTime @default(now())
+
+  @@index([timestamp])
+  @@map("audit_entries")
+}
+
+/// Current mitigation mode (single-row configuration).
+model MitigationSetting {
+  id        String   @id @default("default")
+  mode      String
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("mitigation_settings")
+}
+
+/// Random Forest evaluation run produced by the Python service.
+model ModelEvaluation {
+  id          String   @id @default(cuid())
+  modelName   String
+  version     String
+  accuracy    Float
+  precision   Float
+  recall      Float
+  f1Score     Float
+  trueNormal  Int
+  falseThreat Int
+  missedThreat Int
+  trueThreat  Int
+  dataset     String?
+  periodStart DateTime?
+  periodEnd   DateTime?
+  samples     Int?
+  evaluatedAt DateTime
+
+  features FeatureImportance[]
+
+  @@map("model_evaluations")
+}
+
+/// Feature importance entry belonging to a ModelEvaluation.
+model FeatureImportance {
+  id           String  @id @default(cuid())
+  feature      String
+  importance   Float
+  evaluationId String
+  evaluation   ModelEvaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+
+  @@unique([evaluationId, feature])
+  @@map("feature_importances")
+}
