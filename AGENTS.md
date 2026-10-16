@@ -17,8 +17,9 @@ There is no Figma tooling. This is a plain Next.js project.
 - Production: `pnpm build` then `pnpm start`
 - Type check: `pnpm lint` (runs `tsc --noEmit`)
 - Format: `pnpm format` (oxfmt)
-- Database (PostgreSQL): `pnpm db:push` / `pnpm db:migrate` / `pnpm db:studio`.
-  No migration has been applied and no seed data exists yet.
+- Database (PostgreSQL): `pnpm db:migrate` / `pnpm db:seed` / `pnpm db:studio`.
+  The `init` migration is applied and `prisma/seed.mjs` loads sample data
+  (mirrors the mock dataset) so the database path can be exercised end to end.
 
 ## Project Structure
 

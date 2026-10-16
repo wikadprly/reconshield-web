@@ -1,8 +1,8 @@
 // ReconShield schema (PostgreSQL).
 //
-// Scaffolded for research purposes. No migration has been applied and no seed
-// data is included yet. Fields mirror the domain types in src/types/security.ts
-// and the mock dataset in src/data/mock-security.ts. Do not add invented ML
+// Scaffolded for research purposes. The `init` migration is applied and
+// `prisma/seed.mjs` loads sample data that mirrors the mock dataset. Fields
+// mirror the domain types in src/types/security.ts. Do not add invented ML
 // fields or metrics that are not produced by the Python service.
 
 generator client {
@@ -29,23 +29,32 @@ model Detection {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  approvals     Approval[]
+  tarpitEntries TarpitEntry[]
+
   @@index([timestamp])
   @@index([sourceIp])
+  @@index([status])
+  @@index([classification])
   @@map("detections")
 }
 
 /// An address currently under Dynamic Tarpit mitigation.
 model TarpitEntry {
-  id          String    @id @default(cuid())
-  ip          String    @unique
+  id          String     @id @default(cuid())
+  ip          String     @unique
   detectedAt  DateTime
   duration    String
   addressList String
   status      String
   releasedAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  detectionId String?
+  detection   Detection? @relation(fields: [detectionId], references: [id], onDelete: SetNull)
 
+  @@index([status])
+  @@index([detectionId])
   @@map("tarpit_entries")
 }
 
@@ -61,16 +70,53 @@ model ServiceStatus {
 
 /// Immutable administrator policy-change record.
 model AuditEntry {
-  id           String   @id @default(cuid())
-  timestamp    DateTime
-  administrator String
-  previousMode String
-  newMode      String
-  reason       String?
-  createdAt    DateTime @default(now())
+  id                String   @id @default(cuid())
+  timestamp         DateTime
+  administrator     String
+  previousMode      String
+  newMode           String
+  reason            String?
+  createdAt         DateTime @default(now())
+  administratorId   String?
+  administratorUser User?    @relation(fields: [administratorId], references: [id], onDelete: NoAction)
 
   @@index([timestamp])
+  @@index([administratorId])
   @@map("audit_entries")
+}
+
+/// Administrator account. Passwords are stored only as a server-side hash.
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  role         String   @default("admin")
+  createdAt    DateTime @default(now())
+
+  decidedApprovals Approval[]   @relation("ApprovalDecision")
+  auditEntries     AuditEntry[]
+
+  @@map("users")
+}
+
+/// Manual-mode approval request for a single detection.
+model Approval {
+  id             String    @id @default(cuid())
+  detectionId    String
+  proposedAction String
+  status         String    @default("pending")
+  requestedAt    DateTime  @default(now())
+  decidedAt      DateTime?
+  decidedById    String?
+  reason         String?
+
+  detection Detection @relation(fields: [detectionId], references: [id], onDelete: Cascade)
+  decidedBy User?     @relation("ApprovalDecision", fields: [decidedById], references: [id], onDelete: NoAction)
+
+  @@index([status])
+  @@index([detectionId])
+  @@index([decidedById])
+  @@map("approvals")
 }
 
 /// Current mitigation mode (single-row configuration).
@@ -85,22 +131,22 @@ model MitigationSetting {
 
 /// Random Forest evaluation run produced by the Python service.
 model ModelEvaluation {
-  id          String   @id @default(cuid())
-  modelName   String
-  version     String
-  accuracy    Float
-  precision   Float
-  recall      Float
-  f1Score     Float
-  trueNormal  Int
-  falseThreat Int
+  id           String    @id @default(cuid())
+  modelName    String
+  version      String
+  accuracy     Float
+  precision    Float
+  recall       Float
+  f1Score      Float
+  trueNormal   Int
+  falseThreat  Int
   missedThreat Int
-  trueThreat  Int
-  dataset     String?
-  periodStart DateTime?
-  periodEnd   DateTime?
-  samples     Int?
-  evaluatedAt DateTime
+  trueThreat   Int
+  dataset      String?
+  periodStart  DateTime?
+  periodEnd    DateTime?
+  samples      Int?
+  evaluatedAt  DateTime
 
   features FeatureImportance[]
 
@@ -109,7 +155,7 @@ model ModelEvaluation {
 
 /// Feature importance entry belonging to a ModelEvaluation.
 model FeatureImportance {
-  id           String  @id @default(cuid())
+  id           String          @id @default(cuid())
   feature      String
   importance   Float
   evaluationId String
