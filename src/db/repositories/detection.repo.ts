@@ -1,7 +1,12 @@
 import "server-only";
 
 import { getPrisma } from "@/db/prisma";
+import { assertOneOf } from "@/lib/validation";
 import type { Detection } from "@/types/security";
+
+const CLASSIFICATIONS = ["Reconnaissance", "Normal"] as const;
+const ACTIONS = ["TARPIT", "Pending", "Blocked"] as const;
+const STATUSES = ["Active", "Review", "Released", "Resolved"] as const;
 
 export async function findRecentDetections(limit = 20): Promise<Detection[]> {
   const rows = await getPrisma().detection.findMany({
@@ -16,9 +21,9 @@ export async function findRecentDetections(limit = 20): Promise<Detection[]> {
     sourcePort: row.sourcePort,
     destinationIp: row.destinationIp,
     destinationPort: row.destinationPort,
-    classification: row.classification as Detection["classification"],
+    classification: assertOneOf(row.classification, CLASSIFICATIONS, "detection.classification"),
     confidence: row.confidence,
-    action: row.action as Detection["action"],
-    status: row.status as Detection["status"],
+    action: assertOneOf(row.action, ACTIONS, "detection.action"),
+    status: assertOneOf(row.status, STATUSES, "detection.status"),
   }));
 }

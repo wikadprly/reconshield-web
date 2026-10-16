@@ -1,4 +1,4 @@
-import type { AuditEntry, Detection, ServiceStatus, TarpitEntry } from "@/types/security";
+import type { AuditEntry, Detection, ModelMetrics, ServiceStatus, TarpitEntry } from "@/types/security";
 
 export const trafficByRange = {
   "1h": [
@@ -66,3 +66,21 @@ export const featureImportance = [
   { feature: "Total Bytes", importance: 0.57 },
   { feature: "ACK Flag Count", importance: 0.42 },
 ];
+
+export const modelMetrics: ModelMetrics = {
+  modelName: "Random Forest Classifier",
+  version: "v1.4.2",
+  accuracy: 97.84,
+  precision: 96.72,
+  recall: 95.91,
+  f1Score: 96.31,
+  confusionMatrix: {
+    trueNormal: 9541,
+    falseThreat: 117,
+    missedThreat: 48,
+    trueThreat: 1125,
+  },
+  featureImportance,
+  dataset: "ReconFlow-2026 v2",
+  evaluatedAt: "2026-02-28T00:00:00.000Z",
+};

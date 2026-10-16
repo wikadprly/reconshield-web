@@ -60,6 +60,12 @@ export interface SecurityOverview {
   };
 }
 
+/** Relative predictive contribution of a single feature. */
+export interface FeatureImportance {
+  feature: string;
+  importance: number;
+}
+
 /**
  * Random Forest evaluation metrics. Field set intentionally mirrors what the
  * Python service produces and the ML Performance screen already displays. Do
@@ -78,7 +84,7 @@ export interface ModelMetrics {
     missedThreat: number;
     trueThreat: number;
   };
-  featureImportance: { feature: string; importance: number }[];
+  featureImportance: FeatureImportance[];
   dataset?: string;
   evaluatedAt?: string;
 }

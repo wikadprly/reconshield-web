@@ -4,11 +4,13 @@ import { Activity, BarChart3, Bell, CheckCheck, ChevronDown, Clock3, LayoutDashb
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useApiResult } from "@/lib/use-api-result";
+import type { SecurityOverview } from "@/types/security";
 
 const navigation = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/threat-logs", label: "Threat Logs", icon: Shield },
-  { href: "/active-tarpit", label: "Active Tarpit", icon: ShieldCheck, count: 31 },
+  { href: "/active-tarpit", label: "Active Tarpit", icon: ShieldCheck },
   { href: "/ml-performance", label: "ML Performance", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -29,6 +31,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [notificationsRead, setNotificationsRead] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
   const menusRef = useRef<HTMLDivElement>(null);
+  const { result: overview } = useApiResult<SecurityOverview>("/api/overview");
+  const tarpitCount = overview?.data.tarpit.length ?? 0;
+  const services = overview?.data.services ?? [];
+  const allOnline = services.length > 0 && services.every((service) => service.status === "Online");
+  const sidebarStatus = !overview ? ["Checking services", "Reading configured data source"] : overview.source === "mock" ? ["Mock services online", "Preview state, not live connectivity"] : allOnline ? ["Services online", `Live source · ${overview.source}`] : ["Service degraded", `Live source · ${overview.source}`];
   useEffect(() => {
     setNow(new Date());
     const id = window.setInterval(() => setNow(new Date()), 1000);
@@ -61,11 +68,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div className="brand"><div className="brand-mark"><ShieldCheck size={25} /><span /></div><div><strong>ReconShield</strong><small>Network Defense Platform</small></div><button className="mobile-close" onClick={() => setSidebarOpen(false)} aria-label="Close navigation"><X size={20} /></button></div>
       <nav aria-label="Primary navigation">
         <span className="nav-label">MONITORING</span>
-        {navigation.slice(0, 4).map((item) => <Link key={item.href} href={item.href} className={pathname === item.href ? "active" : ""} onClick={() => setSidebarOpen(false)}><item.icon size={19} /><span>{item.label}</span>{item.count && <b>{item.count}</b>}</Link>)}
+        {navigation.slice(0, 4).map((item) => <Link key={item.href} href={item.href} className={pathname === item.href ? "active" : ""} onClick={() => setSidebarOpen(false)}><item.icon size={19} /><span>{item.label}</span>{item.href === "/active-tarpit" && tarpitCount > 0 && <b>{tarpitCount}</b>}</Link>)}
         <span className="nav-label control">CONTROL</span>
         {navigation.slice(4).map((item) => <Link key={item.href} href={item.href} className={pathname === item.href ? "active" : ""} onClick={() => setSidebarOpen(false)}><item.icon size={19} /><span>{item.label}</span></Link>)}
       </nav>
-      <div className="sidebar-bottom"><div className="system-online"><span className="pulse-dot" /><div><strong>Mock services online</strong><small>Preview state, not live connectivity</small></div></div><div className="profile-summary"><div className="avatar">AD</div><div><strong>Administrator</strong><small>admin@reconshield.id</small></div></div></div>
+      <div className="sidebar-bottom"><div className="system-online"><span className="pulse-dot" /><div><strong>{sidebarStatus[0]}</strong><small>{sidebarStatus[1]}</small></div></div><div className="profile-summary"><div className="avatar">AD</div><div><strong>Administrator</strong><small>admin@reconshield.id</small></div></div></div>
     </aside>
     {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
     <main>

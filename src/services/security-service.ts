@@ -5,7 +5,7 @@ import { findRecentDetections } from "@/db/repositories/detection.repo";
 import { findLatestModelMetrics } from "@/db/repositories/ml.repo";
 import { findServiceStatuses } from "@/db/repositories/service.repo";
 import { findActiveTarpitEntries } from "@/db/repositories/tarpit.repo";
-import { auditEntries as mockAudit, detections as mockDetections, services as mockServices, tarpitEntries as mockTarpit } from "@/data/mock-security";
+import { auditEntries as mockAudit, detections as mockDetections, modelMetrics as mockMetrics, services as mockServices, tarpitEntries as mockTarpit } from "@/data/mock-security";
 import { env } from "@/lib/env";
 import { fetchModelMetrics, isMlConfigured } from "@/services/ml-service";
 import type { ApiResult, AuditEntry, DataSource, Detection, MitigationMode, ModelMetrics, SecurityOverview, ServiceStatus, TarpitEntry } from "@/types/security";
@@ -53,12 +53,13 @@ export function getAuditEntries(limit = 20): Promise<ApiResult<AuditEntry[]>> {
   return fromDatabaseOrMock(() => findRecentAuditEntries(limit), () => mockAudit.slice(0, limit));
 }
 
-export async function getMlMetrics(): Promise<ApiResult<ModelMetrics | null>> {
+export async function getMlMetrics(): Promise<ApiResult<ModelMetrics>> {
   const generatedAt = now();
 
   if (env.databaseUrl()) {
     try {
-      return { data: await findLatestModelMetrics(), source: "database", generatedAt };
+      const data = await findLatestModelMetrics();
+      if (data) return { data, source: "database", generatedAt };
     } catch (error) {
       console.error("[security-service] model metrics read failed:", error);
     }
@@ -66,13 +67,18 @@ export async function getMlMetrics(): Promise<ApiResult<ModelMetrics | null>> {
 
   if (isMlConfigured()) {
     try {
-      return { data: await fetchModelMetrics(), source: "remote", generatedAt };
+      const data = await fetchModelMetrics();
+      if (data) return { data, source: "remote", generatedAt };
     } catch (error) {
       console.error("[security-service] ML API read failed:", error);
     }
   }
 
-  return { data: null, source: "mock", generatedAt };
+  if (!env.useMockData()) {
+    throw new Error("No model metrics are available and mock data is disabled (RECONSHIELD_USE_MOCK_DATA=false).");
+  }
+
+  return { data: mockMetrics, source: "mock", generatedAt };
 }
 
 export async function getSecurityOverview(): Promise<ApiResult<SecurityOverview>> {
