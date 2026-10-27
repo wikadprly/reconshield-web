@@ -35,7 +35,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const tarpitCount = overview?.data.tarpit.length ?? 0;
   const services = overview?.data.services ?? [];
   const allOnline = services.length > 0 && services.every((service) => service.status === "Online");
-  const sidebarStatus = !overview ? ["Checking services", "Reading configured data source"] : overview.source === "mock" ? ["Mock services online", "Preview state, not live connectivity"] : allOnline ? ["Services online", `Live source · ${overview.source}`] : ["Service degraded", `Live source · ${overview.source}`];
+  const sidebarStatus = !overview
+    ? ["Checking services", "Reading configured data source"]
+    : overview.source === "mock"
+      ? ["Mock services online", "Preview state, not live connectivity"]
+      : overview.source === "mixed"
+        ? ["Live source · mixed", "Some panels fall back to preview data"]
+        : allOnline
+          ? ["Services online", `Live source · ${overview.source}`]
+          : ["Service degraded", `Live source · ${overview.source}`];
   useEffect(() => {
     setNow(new Date());
     const id = window.setInterval(() => setNow(new Date()), 1000);

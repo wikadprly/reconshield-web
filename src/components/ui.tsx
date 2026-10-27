@@ -37,6 +37,9 @@ export function MockNotice({ source }: { source?: DataSource }) {
   if (source === "remote") {
     return <div className="mock-notice remote"><span>REMOTE SERVICE</span> Values on this screen were read from the configured Python ML service.</div>;
   }
+  if (source === "mixed") {
+    return <div className="mock-notice"><span>MIXED SOURCES</span> Parts of this screen come from the live database, others from a fallback source — each panel is labelled where it is shown.</div>;
+  }
   return <div className="mock-notice"><span>PREVIEW DATA</span> Values and service states on this screen are illustrative and are not live network telemetry.</div>;
 }
 

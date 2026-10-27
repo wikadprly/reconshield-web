@@ -88,10 +88,13 @@ export async function getSecurityOverview(): Promise<ApiResult<SecurityOverview>
     getServiceStatuses(),
   ]);
 
+  // One label only when every part of the overview came from the same place.
+  // The old check labelled a mostly-live screen as "mock" whenever a single
+  // panel fell back (T8).
+  const sources: DataSource[] = [detections.source, tarpit.source, services.source];
+  const first = sources[0];
   const source: DataSource =
-    detections.source === "database" && tarpit.source === "database" && services.source === "database"
-      ? "database"
-      : "mock";
+    first !== undefined && sources.every((item) => item === first) ? first : "mixed";
 
   return {
     data: {

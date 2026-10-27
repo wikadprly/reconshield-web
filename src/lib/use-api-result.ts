@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApiResult } from "@/types/security";
 
 export interface ApiResultState<T> {
@@ -20,8 +20,18 @@ export function useApiResult<T>(path: string): ApiResultState<T> {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Cancel handle of the request currently in flight. A manual refresh() used
+  // to leave the previous request running, so a slow older response could
+  // overwrite a newer one (T9).
+  const inFlight = useRef<(() => void) | null>(null);
+
   const refresh = useCallback(() => {
+    inFlight.current?.();
     let cancelled = false;
+    const cancel = () => {
+      cancelled = true;
+    };
+    inFlight.current = cancel;
     setLoading(true);
     setError(null);
 
@@ -40,9 +50,7 @@ export function useApiResult<T>(path: string): ApiResultState<T> {
         if (!cancelled) setLoading(false);
       });
 
-    return () => {
-      cancelled = true;
-    };
+    return cancel;
   }, [path]);
 
   useEffect(() => refresh(), [refresh]);

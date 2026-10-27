@@ -1,10 +1,10 @@
 # reconshield-web
 
 Standalone Next.js 16 (App Router) admin dashboard for the final-year project
-**"Penerapan Algoritma Random Forest dan Dynamic Tarpit Firewall dalam Mitigasi
+**"Penerapan Algoritme Random Forest dan Dynamic Tarpit dalam Mitigasi
 Serangan Reconnaissance."** Styling uses Tailwind CSS v4 with a project theme
-defined in `src/app/globals.css`. All screens currently render mock data that is
-labeled in the UI.
+defined in `src/app/globals.css`. Screens read PostgreSQL when it is configured and fall back
+to clearly-labeled mock data otherwise; every result carries a `source` badge in the UI.
 
 ## Development
 
@@ -77,6 +77,9 @@ There is no Figma tooling. This is a plain Next.js project.
 - This is currently a **read-only** phase. `requestMitigationMode` and
   `requestIpRelease` intentionally throw; do not wire them to the UI or claim a
   mitigation actually happened until writes are implemented and audited.
+  Decision **A20** is final (**Design A** — RouterOS `action=tarpit` via REST API,
+  per proposal §6.2), so implementing that write path (A4) is the next step; the
+  `init` migration is applied and `prisma/seed.mjs` has been run.
 - Validate all external input with `src/lib/validation.ts` and show backend
   mitigation status rather than assuming success on the frontend.
 

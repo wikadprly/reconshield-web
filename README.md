@@ -1,6 +1,6 @@
 # ReconShield Web
 
-Next.js 16 administration dashboard for the final-year project **“Penerapan Algoritma Random Forest dan Dynamic Tarpit Firewall dalam Mitigasi Serangan Reconnaissance.”**
+Next.js 16 administration dashboard for the final-year project **“Penerapan Algoritme Random Forest dan Dynamic Tarpit dalam Mitigasi Serangan Reconnaissance.”**
 
 ## Architecture
 
@@ -87,7 +87,9 @@ pnpm db:studio    # Open Prisma Studio
 
 ## Read-only phase
 
-This is currently a **read-only** phase. `requestMitigationMode` and `requestIpRelease` in `src/services/security-service.ts` intentionally throw. Do not wire them to the UI or claim a mitigation happened until writes are implemented and audited. No migration has been applied and no seed data exists yet.
+This is currently a **read-only** phase. `requestMitigationMode` and `requestIpRelease` in `src/services/security-service.ts` intentionally throw. Do not wire them to the UI or claim a mitigation happened until writes are implemented and audited. (Architectural decision **A20** is final: **Design A** — tarpit executed by RouterOS `action=tarpit` via REST API, exactly per proposal §6.2 — so the write path is next.)
+
+Database state (verified 27 Okt 2026): the `init` migration (`20261016123221_init`) **has been applied** and `prisma/seed.mjs` **has been run** (9 detections, 5 tarpit entries, 2 model evaluations, 2 service statuses, 0 users).
 
 ## Security
 

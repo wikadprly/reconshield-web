@@ -38,9 +38,10 @@ export interface ServiceStatus {
 
 /**
  * Where a value came from. "mock" values must always be labeled in the UI and
- * never presented as live telemetry.
+ * never presented as live telemetry. "mixed" means one screen aggregates more
+ * than one source and no single label would be honest.
  */
-export type DataSource = "database" | "remote" | "mock";
+export type DataSource = "database" | "remote" | "mock" | "mixed";
 
 export interface ApiResult<T> {
   data: T;
