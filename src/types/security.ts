@@ -60,6 +60,28 @@ export interface SecurityOverview {
   };
 }
 
+/**
+ * Live `/system/resource` telemetry from the MikroTik router via the binary
+ * API. Used for the router health card and the honest MikroTik service status.
+ */
+export interface RouterResource {
+  boardName: string;
+  routerOsVersion: string;
+  cpuLoadPercent: number;
+  freeMemoryMegabytes: number;
+  totalMemoryMegabytes: number;
+  memoryUsedPercent: number;
+  uptime: string;
+}
+
+/** One historical health sample for the router resource chart. */
+export interface RouterHistoryPoint {
+  /** HH:MM label for the chart x axis. */
+  time: string;
+  cpuLoadPercent: number;
+  memoryUsedPercent: number;
+}
+
 /** Relative predictive contribution of a single feature. */
 export interface FeatureImportance {
   feature: string;

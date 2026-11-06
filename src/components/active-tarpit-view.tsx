@@ -21,7 +21,7 @@ export default function ActiveTarpitView() {
     <DataStateNotice loading={loading} error={error} />
     <div className="metrics-grid three">
       <MetricCard title="Active Tarpitted IPs" value={`${rows.length}`} detail="Currently in the mitigation list" icon={<LockKeyhole size={20} />} tone="purple" />
-      <MetricCard title="Address-List Status" value="Synchronized" detail="Address-List reconshield-tarpit-active" icon={<Database size={20} />} tone="cyan" badge={<Badge tone="success" dot>{result?.source ?? "source"}</Badge>} />
+      <MetricCard title="Address-List Status" value="Synchronized" detail={rows[0]?.addressList ? `Address-List ${rows[0].addressList}` : "MikroTik Address-List"} icon={<Database size={20} />} tone="cyan" badge={<Badge tone={result?.source === "remote" ? "success" : result?.source === "database" ? "info" : "warning"} dot>{result?.source ?? "source"}</Badge>} />
       <MetricCard title="Default Tarpit Duration" value="24 hours" detail="Configured mitigation window" icon={<Clock3 size={20} />} />
     </div>
     <div className="explain-banner"><div className="banner-icon"><Shield size={20} /></div><div><strong>Dynamic Tarpit mitigation</strong><p>In production, addresses classified as reconnaissance sources are submitted to the backend, which owns the RouterOS credentials and confirms Address-List changes. Releasing an IP here only updates local interface state until the write path is implemented.</p></div></div>
@@ -31,6 +31,6 @@ export default function ActiveTarpitView() {
       {rows.length === 0 && !loading && <div className="empty-state"><CheckCircle2 size={28} /><strong>No addresses remain in this list</strong></div>}
     </Card>
     {releaseIp && <Modal title="Release source IP?" confirmText="Update preview" tone="danger" onCancel={() => setReleaseIp(null)} onConfirm={() => { setReleasedIps((current) => [...current, releaseIp]); setReleaseIp(null); }}><p>You are about to remove <b className="mono">{releaseIp}</b> from the local preview. In production, this action must wait for backend confirmation before showing success.</p><div className="modal-warning">No RouterOS request will be sent from this client preview.</div></Modal>}
-    {selectedIp && <Modal title="Address-List entry" confirmText="Close details" onCancel={() => setSelectedIp(null)} onConfirm={() => setSelectedIp(null)}><div className="detail-grid"><div><span>Source IP</span><b className="mono">{selectedIp}</b></div><div><span>Address-List</span><b className="mono">reconshield-tarpit-active</b></div><div><span>Mitigation</span><Badge tone="purple">Dynamic Tarpit</Badge></div><div><span>Source</span><b>{result?.source ?? "unavailable"}</b></div></div></Modal>}
+    {selectedIp && <Modal title="Address-List entry" confirmText="Close details" onCancel={() => setSelectedIp(null)} onConfirm={() => setSelectedIp(null)}><div className="detail-grid"><div><span>Source IP</span><b className="mono">{selectedIp}</b></div><div><span>Address-List</span><b className="mono">{rows.find(r=>r.ip===selectedIp)?.addressList || "recon"}</b></div><div><span>Mitigation</span><Badge tone="purple">Dynamic Tarpit</Badge></div><div><span>Source</span><b>{result?.source ?? "unavailable"}</b></div></div></Modal>}
   </div>;
 }

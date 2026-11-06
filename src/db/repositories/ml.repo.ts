@@ -24,7 +24,7 @@ export async function findLatestModelMetrics(): Promise<ModelMetrics | null> {
       missedThreat: row.missedThreat,
       trueThreat: row.trueThreat,
     },
-    featureImportance: row.features.map((feature) => ({
+    featureImportance: row.features.map((feature: any) => ({
       feature: feature.feature,
       importance: feature.importance,
     })),

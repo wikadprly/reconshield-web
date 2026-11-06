@@ -11,7 +11,7 @@ export async function findServiceStatuses(): Promise<ServiceStatus[]> {
     orderBy: { name: "asc" },
   });
 
-  return rows.map((row) => ({
+  return rows.map((row: any) => ({
     name: row.name,
     detail: row.detail,
     status: assertOneOf(row.status, STATUSES, "serviceStatus.status"),

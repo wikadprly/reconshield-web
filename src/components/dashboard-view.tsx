@@ -1,22 +1,38 @@
 "use client";
 
 import { Activity, AlertTriangle, ArrowRight, Database, LockKeyhole, Network, Server, ShieldCheck, TrendingUp } from "lucide-react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { useState } from "react";
 import DetectionTable from "@/components/detection-table";
+import RouterHistoryChart from "@/components/router-history-chart";
 import TrafficChart from "@/components/traffic-chart";
 import { Badge, Card, CardHeader, DataStateNotice, MetricCard, MockNotice } from "@/components/ui";
 import { trafficByRange } from "@/data/mock-security";
 import { rankTopSources } from "@/lib/format";
 import { useApiResult } from "@/lib/use-api-result";
-import type { SecurityOverview } from "@/types/security";
+import type { RouterHistoryPoint, RouterResource, SecurityOverview } from "@/types/security";
 
 type Range = keyof typeof trafficByRange;
 
 export default function DashboardView() {
   const [range, setRange] = useState<Range>("24h");
   const { result, loading, error } = useApiResult<SecurityOverview>("/api/overview");
+  const { result: routerResult, error: routerError, refresh: refreshRouter } = useApiResult<RouterResource>("/api/system");
+  const { result: historyResult, error: historyError, refresh: refreshHistory } = useApiResult<RouterHistoryPoint[]>("/api/system/history");
+  const routerResource = routerResult?.data;
+  const routerHistory = historyResult?.data;
   const labels: Record<Range, string> = { "1h": "1 Hour", "24h": "24 Hours", "7d": "7 Days" };
+
+  // Poll the live telemetry and its history while the dashboard is open so the
+  // samples keep accumulating and the chart moves on its own.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      refreshRouter();
+      refreshHistory();
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, [refreshRouter, refreshHistory]);
 
   const overview = result?.data;
   const detections = overview?.detections ?? [];
@@ -49,6 +65,8 @@ export default function DashboardView() {
     </div>
 
     <Card><CardHeader title="Recent Detections" subtitle="Latest sample Random Forest classifications" action={<Link className="btn btn-secondary" href="/threat-logs">View all incidents</Link>} /><DetectionTable rows={detections.slice(0, 5)} compact /></Card>
+    <Card><CardHeader title="Router Resource History" subtitle="CPU & memory utilization over time (sampled every live read)" />{routerHistory && routerHistory.length > 0 ? <RouterHistoryChart data={routerHistory} /> : <div className="empty-table">Collecting samples…{historyError ? ` (${historyError})` : " Keep this dashboard open; one sample is stored per live read."}</div>}</Card>
+    <Card><CardHeader title="Router Health (MikroTik)" subtitle="Live /system/resource telemetry via the binary API" />{routerResource ? <><div className="summary-stats"><div><span>CPU load</span><b>{routerResource.cpuLoadPercent}%</b></div><div><span>Memory used</span><b>{routerResource.memoryUsedPercent}%</b></div><div><span>Uptime</span><b>{routerResource.uptime}</b></div></div><small className="evidence-note"><Database size={14} /> {routerResource.boardName} · RouterOS {routerResource.routerOsVersion} · {routerResource.freeMemoryMegabytes} MB free of {routerResource.totalMemoryMegabytes} MB · source {routerResult?.source ?? "unavailable"}</small></> : <div className="empty-table">Router telemetry unavailable{routerError ? `: ${routerError}` : "."}</div>}</Card>
     <div className="architecture-strip"><Network size={20} /><span>MikroTik CHR</span><ArrowRight size={14} /><span>NetFlow/IPFIX</span><ArrowRight size={14} /><span>Python preprocessing</span><ArrowRight size={14} /><span>Random Forest</span><ArrowRight size={14} /><span>RouterOS REST API</span><ArrowRight size={14} /><span>Dynamic Tarpit</span><ShieldCheck size={20} /></div>
   </div>;
 }

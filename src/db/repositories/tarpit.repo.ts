@@ -9,7 +9,7 @@ export async function findActiveTarpitEntries(): Promise<TarpitEntry[]> {
     orderBy: { detectedAt: "desc" },
   });
 
-  return rows.map((row) => ({
+  return rows.map((row: any) => ({
     ip: row.ip,
     detectedAt: row.detectedAt.toISOString(),
     duration: row.duration,

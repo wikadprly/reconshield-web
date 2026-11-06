@@ -1,10 +1,3 @@
-// ReconShield schema (PostgreSQL).
-//
-// Scaffolded for research purposes. The `init` migration is applied and
-// `prisma/seed.mjs` loads sample data that mirrors the mock dataset. Fields
-// mirror the domain types in src/types/security.ts. Do not add invented ML
-// fields or metrics that are not produced by the Python service.
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -16,7 +9,7 @@ datasource db {
 
 /// A classified network flow / incident.
 model Detection {
-  id              String   @id
+  id              String        @id
   timestamp       DateTime
   sourceIp        String
   sourcePort      Int
@@ -26,11 +19,10 @@ model Detection {
   confidence      Float
   action          String
   status          String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  approvals     Approval[]
-  tarpitEntries TarpitEntry[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  approvals       Approval[]
+  tarpitEntries   TarpitEntry[]
 
   @@index([timestamp])
   @@index([sourceIp])
@@ -51,7 +43,7 @@ model TarpitEntry {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   detectionId String?
-  detection   Detection? @relation(fields: [detectionId], references: [id], onDelete: SetNull)
+  detection   Detection? @relation(fields: [detectionId], references: [id])
 
   @@index([status])
   @@index([detectionId])
@@ -87,12 +79,11 @@ model AuditEntry {
 
 /// Administrator account. Passwords are stored only as a server-side hash.
 model User {
-  id           String   @id @default(cuid())
-  username     String   @unique
-  passwordHash String
-  role         String   @default("admin")
-  createdAt    DateTime @default(now())
-
+  id               String       @id @default(cuid())
+  username         String       @unique
+  passwordHash     String
+  role             String       @default("admin")
+  createdAt        DateTime     @default(now())
   decidedApprovals Approval[]   @relation("ApprovalDecision")
   auditEntries     AuditEntry[]
 
@@ -109,9 +100,8 @@ model Approval {
   decidedAt      DateTime?
   decidedById    String?
   reason         String?
-
-  detection Detection @relation(fields: [detectionId], references: [id], onDelete: Cascade)
-  decidedBy User?     @relation("ApprovalDecision", fields: [decidedById], references: [id], onDelete: NoAction)
+  decidedBy      User?     @relation("ApprovalDecision", fields: [decidedById], references: [id], onDelete: NoAction)
+  detection      Detection @relation(fields: [detectionId], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@index([detectionId])
@@ -129,9 +119,27 @@ model MitigationSetting {
   @@map("mitigation_settings")
 }
 
+/// One point-in-time sample of the MikroTik router's /system/resource
+/// telemetry, recorded whenever the web app reads it live. Feeds the
+/// router health history chart.
+model RouterSample {
+  id              Int      @id @default(autoincrement())
+  takenAt         DateTime @default(now())
+  boardName       String
+  routerOsVersion String
+  cpuLoadPercent  Float
+  usedMemPercent  Float
+  freeMemMb       Float
+  totalMemMb      Float
+  uptime          String
+
+  @@index([takenAt])
+  @@map("router_samples")
+}
+
 /// Random Forest evaluation run produced by the Python service.
 model ModelEvaluation {
-  id           String    @id @default(cuid())
+  id           String              @id @default(cuid())
   modelName    String
   version      String
   accuracy     Float
@@ -147,8 +155,7 @@ model ModelEvaluation {
   periodEnd    DateTime?
   samples      Int?
   evaluatedAt  DateTime
-
-  features FeatureImportance[]
+  features     FeatureImportance[]
 
   @@map("model_evaluations")
 }

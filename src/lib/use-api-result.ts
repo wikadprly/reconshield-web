@@ -27,7 +27,18 @@ export function useApiResult<T>(path: string): ApiResultState<T> {
 
     fetch(path, { cache: "no-store" })
       .then(async (response) => {
-        const body = (await response.json()) as ApiResult<T> | { error: string };
+        const text = await response.text();
+        if (!text || text.trim() === "") {
+          throw new Error(response.ok ? "Empty response from server" : `Request failed with ${response.status}`);
+        }
+
+        let body: ApiResult<T> | { error: string };
+        try {
+          body = JSON.parse(text) as ApiResult<T> | { error: string };
+        } catch {
+          throw new Error(`Invalid JSON response from server (status ${response.status})`);
+        }
+
         if (!response.ok) {
           throw new Error("error" in body ? body.error : `Request failed with ${response.status}`);
         }

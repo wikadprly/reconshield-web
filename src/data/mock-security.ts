@@ -1,4 +1,4 @@
-import type { AuditEntry, Detection, ModelMetrics, ServiceStatus, TarpitEntry } from "@/types/security";
+import type { AuditEntry, Detection, ModelMetrics, RouterResource, ServiceStatus, TarpitEntry } from "@/types/security";
 
 export const trafficByRange = {
   "1h": [
@@ -52,6 +52,16 @@ export const services: ServiceStatus[] = [
   { name: "MikroTik RouterOS API", detail: "Configured endpoint · credentials server-side", status: "Online" },
   { name: "Random Forest Service", detail: "Classifier service · v1.4.2", status: "Online" },
 ];
+
+export const routerResource: RouterResource = {
+  boardName: "hAP lite (RB941-2nD)",
+  routerOsVersion: "6.48.6",
+  cpuLoadPercent: 38.5,
+  freeMemoryMegabytes: 14.2,
+  totalMemoryMegabytes: 32,
+  memoryUsedPercent: 55.6,
+  uptime: "5d02:14:33",
+};
 
 export const auditEntries: AuditEntry[] = [
   { id: "AUD-003", timestamp: "10 Mar 2026, 20:15", administrator: "admin", previousMode: "Manual", newMode: "Automatic" },

@@ -12,7 +12,7 @@ export async function findRecentAuditEntries(limit = 20): Promise<AuditEntry[]> 
     take: limit,
   });
 
-  return rows.map((row) => ({
+  return rows.map((row: any) => ({
     id: row.id,
     timestamp: row.timestamp.toISOString(),
     administrator: row.administrator,
