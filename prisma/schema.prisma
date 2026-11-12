@@ -120,12 +120,18 @@ model Approval {
   @@map("approvals")
 }
 
-/// Current mitigation mode (single-row configuration).
+/// Current mitigation policy (single-row configuration). Bounds are enforced
+/// in the service layer: the policy is bounded by design, not optimised.
 model MitigationSetting {
-  id        String   @id @default("default")
-  mode      String
-  updatedAt DateTime @updatedAt
-  updatedBy String?
+  id                 String   @id @default("default")
+  mode               String
+  confidenceThreshold Int     @default(85)
+  durationMinutes    Int      @default(60)
+  maxDurationMinutes Int      @default(360)
+  maxActiveEntries   Int      @default(50)
+  addressList        String   @default("reconshield-tarpit-active")
+  updatedAt          DateTime @updatedAt
+  updatedBy          String?
 
   @@map("mitigation_settings")
 }

@@ -112,7 +112,9 @@ try {
   }
 
   await client.query(
-    "INSERT INTO mitigation_settings (id, mode, `updatedAt`) VALUES ('default', 'Automatic', NOW())",
+    `INSERT INTO mitigation_settings
+       (id, mode, \`confidenceThreshold\`, \`durationMinutes\`, \`maxDurationMinutes\`, \`maxActiveEntries\`, \`addressList\`, \`updatedAt\`)
+     VALUES ('default', 'Automatic', 85, 60, 360, 50, 'reconshield-tarpit-active', NOW())`,
   );
 
   await client.query(

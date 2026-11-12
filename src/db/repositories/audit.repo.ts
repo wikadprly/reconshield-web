@@ -18,5 +18,6 @@ export async function findRecentAuditEntries(limit = 20): Promise<AuditEntry[]> 
     administrator: row.administrator,
     previousMode: assertOneOf<MitigationMode>(row.previousMode, MODES, "auditEntry.previousMode"),
     newMode: assertOneOf<MitigationMode>(row.newMode, MODES, "auditEntry.newMode"),
+    reason: row.reason ?? undefined,
   }));
 }

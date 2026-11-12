@@ -1,4 +1,4 @@
-import type { AuditEntry, Detection, ModelMetrics, ServiceStatus, TarpitEntry } from "@/types/security";
+import type { AuditEntry, Detection, MitigationPolicy, ModelMetrics, ServiceStatus, TarpitEntry } from "@/types/security";
 
 export const trafficByRange = {
   "1h": [
@@ -58,6 +58,15 @@ export const auditEntries: AuditEntry[] = [
   { id: "AUD-002", timestamp: "08 Mar 2026, 09:42", administrator: "admin", previousMode: "Automatic", newMode: "Manual" },
   { id: "AUD-001", timestamp: "01 Mar 2026, 14:10", administrator: "peneliti", previousMode: "Manual", newMode: "Automatic" },
 ];
+
+export const mitigationPolicy: MitigationPolicy = {
+  mode: "Automatic",
+  confidenceThreshold: 85,
+  durationMinutes: 60,
+  maxDurationMinutes: 360,
+  maxActiveEntries: 50,
+  addressList: "reconshield-tarpit-active",
+};
 
 export const featureImportance = [
   { feature: "Flow Duration", importance: 0.89 },

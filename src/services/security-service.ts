@@ -3,12 +3,17 @@ import "server-only";
 import { findRecentAuditEntries } from "@/db/repositories/audit.repo";
 import { findRecentDetections } from "@/db/repositories/detection.repo";
 import { findLatestModelMetrics } from "@/db/repositories/ml.repo";
+import { findMitigationPolicy, saveMitigationPolicy } from "@/db/repositories/policy.repo";
 import { findServiceStatuses } from "@/db/repositories/service.repo";
 import { findActiveTarpitEntries } from "@/db/repositories/tarpit.repo";
-import { auditEntries as mockAudit, detections as mockDetections, modelMetrics as mockMetrics, services as mockServices, tarpitEntries as mockTarpit } from "@/data/mock-security";
+import { auditEntries as mockAudit, detections as mockDetections, mitigationPolicy as mockPolicy, modelMetrics as mockMetrics, services as mockServices, tarpitEntries as mockTarpit } from "@/data/mock-security";
 import { env } from "@/lib/env";
+import { parsePolicyPayload } from "@/lib/policy";
 import { fetchModelMetrics, isMlConfigured } from "@/services/ml-service";
-import type { ApiResult, AuditEntry, DataSource, Detection, MitigationMode, ModelMetrics, SecurityOverview, ServiceStatus, TarpitEntry } from "@/types/security";
+import type { ApiResult, AuditEntry, DataSource, Detection, MitigationMode, MitigationPolicy, ModelMetrics, SecurityOverview, ServiceStatus, TarpitEntry } from "@/types/security";
+
+/** Local-network stand-in until authentication exists (audit actor). */
+export const LOCAL_ACTOR = "admin lokal";
 
 function now(): string {
   return new Date().toISOString();
@@ -112,8 +117,30 @@ export async function getSecurityOverview(): Promise<ApiResult<SecurityOverview>
   };
 }
 
-// Write operations remain disabled in the read-only phase. When they are
-// enabled they must validate input, authorize an administrator, apply the
+export function getMitigationPolicy(): Promise<ApiResult<MitigationPolicy>> {
+  return fromDatabaseOrMock(() => findMitigationPolicy(), () => mockPolicy);
+}
+
+/**
+ * Persist a policy change. This is the one write path enabled in the
+ * read-only phase: it changes configuration only, never the router, and the
+ * change + audit entry are committed together.
+ */
+export async function updateMitigationPolicy(
+  payload: unknown,
+  actor: { administrator: string; administratorId?: string; reason?: string } = { administrator: LOCAL_ACTOR },
+): Promise<MitigationPolicy> {
+  if (!env.databaseUrl()) {
+    throw new Error("DATABASE_URL tidak dikonfigurasi; kebijakan tidak bisa disimpan.");
+  }
+  const policy = parsePolicyPayload(payload);
+  const rawReason = (payload as { reason?: unknown }).reason;
+  const reason = typeof rawReason === "string" && rawReason.trim() !== "" ? rawReason.trim().slice(0, 200) : undefined;
+  return saveMitigationPolicy(policy, { ...actor, reason });
+}
+
+// Router write operations remain disabled in the read-only phase. When they
+// are enabled they must validate input, authorize an administrator, apply the
 // change through the backend, and record an audit entry in one transaction.
 export async function requestMitigationMode(_mode: MitigationMode): Promise<never> {
   throw new Error("Mengubah mode mitigasi dinonaktifkan pada fase baca-saja.");

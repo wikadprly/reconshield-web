@@ -20,3 +20,21 @@ export function assertOneOf<T extends string>(value: unknown, allowed: readonly 
   }
   throw new Error(`${label} harus salah satu dari: ${allowed.join(", ")}`);
 }
+
+/** Clamp-free integer validation: reject, never silently coerce. */
+export function assertIntInRange(
+  value: unknown,
+  { min, max, label }: { min: number; max: number; label: string },
+): number {
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new Error(`${label} harus bilangan bulat.`);
+  }
+  if (value < min || value > max) {
+    throw new Error(`${label} harus antara ${min} dan ${max}.`);
+  }
+  return value;
+}
+
+/** Allowed tarpit durations (minutes). Bounded by design, no free input. */
+export const ALLOWED_DURATIONS = [15, 60, 240, 360] as const;
+

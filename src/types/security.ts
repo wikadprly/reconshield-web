@@ -28,6 +28,22 @@ export interface AuditEntry {
   administrator: string;
   previousMode: MitigationMode;
   newMode: MitigationMode;
+  reason?: string;
+}
+
+/**
+ * Bounded mitigation policy. Ranges are enforced server-side; this is a
+ * safety envelope for a 32 MB / 1-core router, never an optimisation target.
+ */
+export interface MitigationPolicy {
+  mode: MitigationMode;
+  confidenceThreshold: number;
+  durationMinutes: number;
+  maxDurationMinutes: number;
+  maxActiveEntries: number;
+  addressList: string;
+  updatedAt?: string;
+  updatedBy?: string;
 }
 
 export interface ServiceStatus {
