@@ -69,11 +69,16 @@ export interface SecurityOverview {
   detections: Detection[];
   tarpit: TarpitEntry[];
   services: ServiceStatus[];
-  /** Counts derived from the loaded sample only, not a global total. */
-  sampleCounts: {
+  /**
+   * Global aggregates straight from the database. `scoped` is false when the
+   * numbers had to be derived from the loaded sample (mock/fallback mode), so
+   * the UI can label them honestly.
+   */
+  totals: {
     detections: number;
     reconnaissance: number;
     tarpitActive: number;
+    scoped: boolean;
   };
 }
 

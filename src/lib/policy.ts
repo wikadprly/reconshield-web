@@ -1,5 +1,7 @@
-import { ALLOWED_DURATIONS, assertIntInRange, assertOneOf, isNonEmptyString } from "@/lib/validation";
+import { assertIntInRange, assertOneOf, isNonEmptyString } from "@/lib/validation";
 import type { MitigationMode, MitigationPolicy } from "@/types/security";
+
+import { ALLOWED_DURATIONS } from "@/lib/policy-options";
 
 const MODES = ["Automatic", "Manual"] as const;
 

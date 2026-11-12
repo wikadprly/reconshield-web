@@ -3,6 +3,11 @@ import "server-only";
 import { getPrisma } from "@/db/prisma";
 import type { TarpitEntry } from "@/types/security";
 
+/** Global count of address-list entries still under mitigation. */
+export async function countActiveTarpitEntries(): Promise<number> {
+  return getPrisma().tarpitEntry.count({ where: { status: "Active" } });
+}
+
 export async function findActiveTarpitEntries(): Promise<TarpitEntry[]> {
   const rows = await getPrisma().tarpitEntry.findMany({
     where: { status: "Active" },

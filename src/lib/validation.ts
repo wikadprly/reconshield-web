@@ -35,6 +35,5 @@ export function assertIntInRange(
   return value;
 }
 
-/** Allowed tarpit durations (minutes). Bounded by design, no free input. */
-export const ALLOWED_DURATIONS = [15, 60, 240, 360] as const;
+
 

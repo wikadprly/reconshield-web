@@ -1,11 +1,11 @@
 import "server-only";
 
 import { findRecentAuditEntries } from "@/db/repositories/audit.repo";
-import { findRecentDetections } from "@/db/repositories/detection.repo";
+import { countDetections, findRecentDetections } from "@/db/repositories/detection.repo";
 import { findLatestModelMetrics } from "@/db/repositories/ml.repo";
 import { findMitigationPolicy, saveMitigationPolicy } from "@/db/repositories/policy.repo";
 import { findServiceStatuses } from "@/db/repositories/service.repo";
-import { findActiveTarpitEntries } from "@/db/repositories/tarpit.repo";
+import { countActiveTarpitEntries, findActiveTarpitEntries } from "@/db/repositories/tarpit.repo";
 import { auditEntries as mockAudit, detections as mockDetections, mitigationPolicy as mockPolicy, modelMetrics as mockMetrics, services as mockServices, tarpitEntries as mockTarpit } from "@/data/mock-security";
 import { env } from "@/lib/env";
 import { parsePolicyPayload } from "@/lib/policy";
@@ -86,11 +86,50 @@ export async function getMlMetrics(): Promise<ApiResult<ModelMetrics>> {
   return { data: mockMetrics, source: "mock", generatedAt };
 }
 
+/**
+ * Global dashboard totals. When the database is unavailable the numbers fall
+ * back to the loaded sample and are flagged `scoped: true` — never presented as
+ * a global count.
+ */
+async function getTotals(): Promise<SecurityOverview["totals"]> {
+  if (!env.databaseUrl()) {
+    const detections = mockDetections;
+    return {
+      detections: detections.length,
+      reconnaissance: detections.filter((row) => row.classification === "Reconnaissance").length,
+      tarpitActive: mockTarpit.filter((row) => row.status === "Active").length,
+      scoped: true,
+    };
+  }
+
+  try {
+    const [detectionCounts, tarpitActive] = await Promise.all([
+      countDetections(),
+      countActiveTarpitEntries(),
+    ]);
+    return {
+      detections: detectionCounts.total,
+      reconnaissance: detectionCounts.reconnaissance,
+      tarpitActive,
+      scoped: false,
+    };
+  } catch (error) {
+    console.error("[security-service] totals read failed:", error);
+    return {
+      detections: mockDetections.length,
+      reconnaissance: mockDetections.filter((row) => row.classification === "Reconnaissance").length,
+      tarpitActive: mockTarpit.filter((row) => row.status === "Active").length,
+      scoped: true,
+    };
+  }
+}
+
 export async function getSecurityOverview(): Promise<ApiResult<SecurityOverview>> {
-  const [detections, tarpit, services] = await Promise.all([
+  const [detections, tarpit, services, totals] = await Promise.all([
     getRecentDetections(100),
     getTarpitEntries(),
     getServiceStatuses(),
+    getTotals(),
   ]);
 
   // One label only when every part of the overview came from the same place.
@@ -106,11 +145,7 @@ export async function getSecurityOverview(): Promise<ApiResult<SecurityOverview>
       detections: detections.data,
       tarpit: tarpit.data,
       services: services.data,
-      sampleCounts: {
-        detections: detections.data.length,
-        reconnaissance: detections.data.filter((row) => row.classification === "Reconnaissance").length,
-        tarpitActive: tarpit.data.filter((row) => row.status === "Active").length,
-      },
+      totals,
     },
     source,
     generatedAt: detections.generatedAt,

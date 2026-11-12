@@ -8,6 +8,16 @@ const CLASSIFICATIONS = ["Reconnaissance", "Normal"] as const;
 const ACTIONS = ["TARPIT", "Pending", "Blocked"] as const;
 const STATUSES = ["Active", "Review", "Released", "Resolved"] as const;
 
+/** Global totals for the dashboard, independent of the loaded sample. */
+export async function countDetections(): Promise<{ total: number; reconnaissance: number }> {
+  const prisma = getPrisma();
+  const [total, reconnaissance] = await Promise.all([
+    prisma.detection.count(),
+    prisma.detection.count({ where: { classification: "Reconnaissance" } }),
+  ]);
+  return { total, reconnaissance };
+}
+
 export async function findRecentDetections(limit = 20): Promise<Detection[]> {
   const rows = await getPrisma().detection.findMany({
     orderBy: { timestamp: "desc" },
