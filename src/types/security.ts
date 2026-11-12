@@ -133,6 +133,24 @@ export interface SecurityOverview {
   };
 }
 
+/** Live MikroTik `/system/resource` snapshot. */
+export interface RouterResource {
+  boardName: string;
+  routerOsVersion: string;
+  cpuLoadPercent: number;
+  freeMemoryMegabytes: number;
+  totalMemoryMegabytes: number;
+  memoryUsedPercent: number;
+  uptime: string;
+}
+
+/** One historical health sample for the router resource chart. */
+export interface RouterHistoryPoint {
+  time: string;
+  cpuLoadPercent: number;
+  memoryUsedPercent: number;
+}
+
 /** Relative predictive contribution of a single feature. */
 export interface FeatureImportance {
   feature: string;

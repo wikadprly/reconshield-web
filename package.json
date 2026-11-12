@@ -8,6 +8,8 @@
     "build": "cross-env NODE_ENV=production next build",
     "start": "next start",
     "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "format": "oxfmt",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
@@ -22,19 +24,24 @@
     "lucide-react": "^0.468.0",
     "mariadb": "3.4.5",
     "next": "^16.0.0",
+    "node-routeros": "1.6.8",
+    "pdfkit": "^0.20.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "recharts": "^2.15.0"
+    "recharts": "^2.15.0",
+    "source-map-support": "^0.5.21"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.0.0",
+    "@types/pdfkit": "^0.17.7",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "cross-env": "^7.0.3",
     "oxfmt": "^0.2.0",
     "prisma": "7.10.0",
     "tailwindcss": "^4.0.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.7"
   }
 }

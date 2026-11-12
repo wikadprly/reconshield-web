@@ -3,7 +3,7 @@ import "server-only";
 import { createApproval, decideApproval, findApprovals } from "@/db/repositories/approval.repo";
 import { findRecentAuditEntries } from "@/db/repositories/audit.repo";
 import { findEvidenceByDetection, saveEvidence, type EvidenceInput } from "@/db/repositories/evidence.repo";
-import { countDetections, findRecentDetections } from "@/db/repositories/detection.repo";
+import { countDetections, findRecentDetections, findTrafficSeries, type TrafficPoint } from "@/db/repositories/detection.repo";
 import { findLatestModelMetrics } from "@/db/repositories/ml.repo";
 import { findMitigationPolicy, saveMitigationPolicy } from "@/db/repositories/policy.repo";
 import { findServiceStatuses } from "@/db/repositories/service.repo";
@@ -11,10 +11,12 @@ import { countActiveTarpitEntries, findActiveTarpitEntries, markTarpitReleased, 
 import { auditEntries as mockAudit, detections as mockDetections, mitigationPolicy as mockPolicy, modelMetrics as mockMetrics, services as mockServices, tarpitEntries as mockTarpit } from "@/data/mock-security";
 import { env } from "@/lib/env";
 import { parsePolicyPayload } from "@/lib/policy";
+import { findRecentRouterSamples, insertRouterSample } from "@/db/repositories/router.repo";
 import { isIpAddress } from "@/lib/validation";
 import { fetchModelMetrics, isMlConfigured } from "@/services/ml-service";
-import { listTarpitAddressList } from "@/services/mikrotik-service";
-import type { ApiResult, ApprovalRequest, ApprovalStatus, AuditEntry, ClassificationEvidence, DataSource, Detection, MitigationMode, MitigationPolicy, ModelMetrics, SecurityOverview, ServiceStatus, TarpitEntry } from "@/types/security";
+import { getSystemResourceBinary, isMikrotikBinaryConfigured, listTarpitAddressListBinary } from "@/services/mikrotik-binary-service";
+import { isMikrotikConfigured, listTarpitAddressList } from "@/services/mikrotik-service";
+import type { ApiResult, ApprovalRequest, ApprovalStatus, AuditEntry, ClassificationEvidence, DataSource, Detection, MitigationMode, MitigationPolicy, ModelMetrics, RouterHistoryPoint, RouterResource, SecurityOverview, ServiceStatus, TarpitEntry } from "@/types/security";
 
 /** Local-network stand-in until authentication exists (audit actor). */
 export const LOCAL_ACTOR = "admin lokal";
@@ -48,6 +50,14 @@ async function fromDatabaseOrMock<T>(load: () => Promise<T>, mock: () => T): Pro
 
 export function getRecentDetections(limit = 20): Promise<ApiResult<Detection[]>> {
   return fromDatabaseOrMock(() => findRecentDetections(limit), () => mockDetections.slice(0, limit));
+}
+
+/** Dashboard trend data derived from `detections`; no fabricated traffic. */
+export function getTrafficSeries(range: "1h" | "24h" | "7d"): Promise<ApiResult<TrafficPoint[]>> {
+  return fromDatabaseOrMock(
+    () => findTrafficSeries(range),
+    () => [],
+  );
 }
 
 export function getTarpitEntries(): Promise<ApiResult<TarpitEntry[]>> {
@@ -178,6 +188,54 @@ export async function updateMitigationPolicy(
   return saveMitigationPolicy(policy, { ...actor, reason });
 }
 
+// --- Router health ---------------------------------------------------------
+
+/**
+ * Live `/system/resource` read. Each successful read is stored as a sample so
+ * the history chart has data; nothing is invented when the router is absent.
+ */
+export async function getRouterResource(): Promise<ApiResult<RouterResource>> {
+  const generatedAt = now();
+
+  if (isMikrotikBinaryConfigured()) {
+    try {
+      const resource = await getSystemResourceBinary();
+      if (resource) {
+        if (env.databaseUrl()) {
+          try {
+            await insertRouterSample(resource);
+          } catch (error) {
+            console.error("[security-service] router sample insert failed:", error);
+          }
+        }
+        return { data: resource, source: "remote", generatedAt };
+      }
+    } catch (error) {
+      console.error("[security-service] router resource read failed:", error);
+    }
+  }
+
+  // No router configured/readable: report an explicit "not connected" snapshot
+  // instead of inventing telemetry or failing the whole page.
+  return {
+    data: {
+      boardName: "Tidak terhubung",
+      routerOsVersion: "—",
+      cpuLoadPercent: 0,
+      freeMemoryMegabytes: 0,
+      totalMemoryMegabytes: 0,
+      memoryUsedPercent: 0,
+      uptime: "—",
+    },
+    source: "mock",
+    generatedAt,
+  };
+}
+
+export function getRouterResourceHistory(limit = 120): Promise<ApiResult<RouterHistoryPoint[]>> {
+  return fromDatabaseOrMock(() => findRecentRouterSamples(limit), () => []);
+}
+
 // --- Approval center -------------------------------------------------------
 
 export async function getApprovals(status?: ApprovalStatus): Promise<ApiResult<ApprovalRequest[]>> {
@@ -235,7 +293,10 @@ export async function verifyTarpitIp(ip: string, actor: { administrator: string;
     return { ip, present: null, detail: "RouterOS belum dikonfigurasi; verifikasi tidak dapat dilakukan." };
   }
 
-  const entries = await listTarpitAddressList("reconshield-tarpit-active");
+  // Binary API first (RouterOS 6.48.6), REST as the fallback transport.
+  const entries = isMikrotikBinaryConfigured()
+    ? await listTarpitAddressListBinary("reconshield-tarpit-active")
+    : await listTarpitAddressList("reconshield-tarpit-active");
   const present = entries.includes(ip);
 
   if (env.databaseUrl()) {

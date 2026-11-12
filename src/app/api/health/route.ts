@@ -1,6 +1,7 @@
 import { getPrisma } from "@/db/prisma";
 import { env } from "@/lib/env";
 import { requestJson } from "@/lib/http";
+import { getSystemResourceBinary } from "@/services/mikrotik-binary-service";
 import { isMikrotikConfigured } from "@/services/mikrotik-service";
 import { isMlConfigured } from "@/services/ml-service";
 
@@ -46,9 +47,16 @@ export async function GET() {
     checks.mlApi = { configured: false, reachable: false };
   }
 
-  // RouterOS is not probed with credentials here; configuration is reported so
-  // the probe stays side-effect free and read-only.
-  checks.routerOs = { configured: isMikrotikConfigured(), reachable: false, detail: "probing dinonaktifkan pada fase baca-saja" };
+  // RouterOS is probed read-only via /system/resource when configured.
+  if (isMikrotikConfigured()) {
+    const result = await timed(async () => {
+      const resource = await getSystemResourceBinary();
+      if (!resource) throw new Error("RouterOS tidak mengembalikan /system/resource");
+    });
+    checks.routerOs = { configured: true, reachable: result.ok, latencyMs: result.latencyMs, detail: result.detail };
+  } else {
+    checks.routerOs = { configured: false, reachable: false };
+  }
 
   const critical = [checks.database, checks.mlApi].filter((check) => check.configured);
   const healthy = critical.every((check) => check.reachable);

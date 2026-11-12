@@ -164,6 +164,23 @@ model MitigationSetting {
   @@map("mitigation_settings")
 }
 
+/// One point-in-time sample of the MikroTik router's /system/resource
+/// telemetry. Feeds the router health history chart.
+model RouterSample {
+  id              Int      @id @default(autoincrement())
+  takenAt         DateTime @default(now())
+  boardName       String
+  routerOsVersion String
+  cpuLoadPercent  Float
+  usedMemPercent  Float
+  freeMemMb       Float
+  totalMemMb      Float
+  uptime          String
+
+  @@index([takenAt])
+  @@map("router_samples")
+}
+
 /// Random Forest evaluation run produced by the Python service.
 model ModelEvaluation {
   id           String    @id @default(cuid())
