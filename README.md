@@ -24,7 +24,7 @@ Data flow: `route/Server Component → src/services/security-service.ts → src/
 - Tailwind CSS 4
 - Recharts
 - Lucide React
-- PostgreSQL with Prisma 7 (`@prisma/adapter-pg` driver adapter)
+- MySQL 8.4 (kompatibel MariaDB 10.11+) with Prisma 7 (`@prisma/adapter-mariadb` driver adapter)
 
 ## Prerequisites
 
@@ -44,7 +44,7 @@ Data flow: `route/Server Component → src/services/security-service.ts → src/
 2. Configure the environment: copy `.env.example` to `.env` and fill in the values. All variables are **server-only** — never prefix a secret with `NEXT_PUBLIC_`.
 
    ```bash
-   DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/reconshield?schema=public"
+   DATABASE_URL="mysql://USER:PASSWORD@localhost:3306/reconshield"
    PYTHON_ML_API_URL=""
    MIKROTIK_API_URL=""
    MIKROTIK_USERNAME=""

@@ -31,7 +31,7 @@ async function fromDatabaseOrMock<T>(load: () => Promise<T>, mock: () => T): Pro
   }
 
   if (!env.useMockData()) {
-    throw new Error("No data source is available and mock data is disabled (RECONSHIELD_USE_MOCK_DATA=false).");
+    throw new Error("Sumber data tidak tersedia dan data mock dinonaktifkan (RECONSHIELD_USE_MOCK_DATA=false).");
   }
 
   return { data: mock(), source: "mock", generatedAt };
@@ -75,7 +75,7 @@ export async function getMlMetrics(): Promise<ApiResult<ModelMetrics>> {
   }
 
   if (!env.useMockData()) {
-    throw new Error("No model metrics are available and mock data is disabled (RECONSHIELD_USE_MOCK_DATA=false).");
+    throw new Error("Metrik model tidak tersedia dan data mock dinonaktifkan (RECONSHIELD_USE_MOCK_DATA=false).");
   }
 
   return { data: mockMetrics, source: "mock", generatedAt };
@@ -116,9 +116,9 @@ export async function getSecurityOverview(): Promise<ApiResult<SecurityOverview>
 // enabled they must validate input, authorize an administrator, apply the
 // change through the backend, and record an audit entry in one transaction.
 export async function requestMitigationMode(_mode: MitigationMode): Promise<never> {
-  throw new Error("Changing the mitigation mode is disabled in the read-only phase.");
+  throw new Error("Mengubah mode mitigasi dinonaktifkan pada fase baca-saja.");
 }
 
 export async function requestIpRelease(_ip: string): Promise<never> {
-  throw new Error("Releasing an IP is disabled in the read-only phase.");
+  throw new Error("Melepas IP dinonaktifkan pada fase baca-saja.");
 }

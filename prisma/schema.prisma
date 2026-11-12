@@ -1,9 +1,10 @@
-// ReconShield schema (PostgreSQL).
+// ReconShield schema (MySQL 8.4, compatible with MariaDB 10.11+).
 //
-// Scaffolded for research purposes. The `init` migration is applied and
-// `prisma/seed.mjs` loads sample data that mirrors the mock dataset. Fields
-// mirror the domain types in src/types/security.ts. Do not add invented ML
-// fields or metrics that are not produced by the Python service.
+// Scaffolded for research purposes. The MySQL init migration is prepared in
+// prisma/migrations/20261112000000_init_mariadb and `prisma/seed.mjs` loads
+// sample data that mirrors the mock dataset. Fields mirror the domain types in
+// src/types/security.ts. Do not add invented ML fields or metrics that are not
+// produced by the Python service.
 
 generator client {
   provider = "prisma-client"
@@ -11,7 +12,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
 }
 
 /// A classified network flow / incident.

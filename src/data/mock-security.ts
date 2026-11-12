@@ -16,16 +16,16 @@ export const trafficByRange = {
     { time: "12:00", normal: 1830, reconnaissance: 91 },
     { time: "16:00", normal: 2380, reconnaissance: 67 },
     { time: "20:00", normal: 2650, reconnaissance: 146 },
-    { time: "Now", normal: 2520, reconnaissance: 90 },
+    { time: "Sekarang", normal: 2520, reconnaissance: 90 },
   ],
   "7d": [
-    { time: "Wed", normal: 10240, reconnaissance: 421 },
-    { time: "Thu", normal: 11480, reconnaissance: 388 },
-    { time: "Fri", normal: 9870, reconnaissance: 517 },
-    { time: "Sat", normal: 8290, reconnaissance: 274 },
-    { time: "Sun", normal: 7940, reconnaissance: 309 },
-    { time: "Mon", normal: 12180, reconnaissance: 612 },
-    { time: "Tue", normal: 11927, reconnaissance: 556 },
+    { time: "Rab", normal: 10240, reconnaissance: 421 },
+    { time: "Kam", normal: 11480, reconnaissance: 388 },
+    { time: "Jum", normal: 9870, reconnaissance: 517 },
+    { time: "Sab", normal: 8290, reconnaissance: 274 },
+    { time: "Min", normal: 7940, reconnaissance: 309 },
+    { time: "Sen", normal: 12180, reconnaissance: 612 },
+    { time: "Sel", normal: 11927, reconnaissance: 556 },
   ],
 } as const;
 
@@ -49,14 +49,14 @@ export const tarpitEntries: TarpitEntry[] = [
 ];
 
 export const services: ServiceStatus[] = [
-  { name: "MikroTik RouterOS API", detail: "Configured endpoint · credentials server-side", status: "Online" },
-  { name: "Random Forest Service", detail: "Classifier service · v1.4.2", status: "Online" },
+  { name: "MikroTik RouterOS API", detail: "Endpoint terkonfigurasi · kredensial di sisi server", status: "Online" },
+  { name: "Random Forest Service", detail: "Layanan classifier · v1.4.2", status: "Online" },
 ];
 
 export const auditEntries: AuditEntry[] = [
   { id: "AUD-003", timestamp: "10 Mar 2026, 20:15", administrator: "admin", previousMode: "Manual", newMode: "Automatic" },
   { id: "AUD-002", timestamp: "08 Mar 2026, 09:42", administrator: "admin", previousMode: "Automatic", newMode: "Manual" },
-  { id: "AUD-001", timestamp: "01 Mar 2026, 14:10", administrator: "researcher", previousMode: "Manual", newMode: "Automatic" },
+  { id: "AUD-001", timestamp: "01 Mar 2026, 14:10", administrator: "peneliti", previousMode: "Manual", newMode: "Automatic" },
 ];
 
 export const featureImportance = [

@@ -42,7 +42,7 @@ export async function requestJson<T>(url: string, options: HttpRequestOptions = 
 
     const text = await response.text();
     if (!response.ok) {
-      throw new HttpError(`Request to ${url} failed with ${response.status}`, response.status, text);
+      throw new HttpError(`Permintaan ke ${url} gagal dengan status ${response.status}`, response.status, text);
     }
 
     return (text ? JSON.parse(text) : null) as T;

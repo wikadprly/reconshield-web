@@ -39,12 +39,12 @@ export function useApiResult<T>(path: string): ApiResultState<T> {
       .then(async (response) => {
         const body = (await response.json()) as ApiResult<T> | { error: string };
         if (!response.ok) {
-          throw new Error("error" in body ? body.error : `Request failed with ${response.status}`);
+          throw new Error("error" in body ? body.error : `Permintaan gagal dengan status ${response.status}`);
         }
         if (!cancelled) setResult(body as ApiResult<T>);
       })
       .catch((cause: unknown) => {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : "Unable to load data.");
+        if (!cancelled) setError(cause instanceof Error ? cause.message : "Gagal memuat data.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

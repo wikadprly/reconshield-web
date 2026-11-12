@@ -18,5 +18,5 @@ export function assertOneOf<T extends string>(value: unknown, allowed: readonly 
   if (typeof value === "string" && (allowed as readonly string[]).includes(value)) {
     return value as T;
   }
-  throw new Error(`${label} must be one of: ${allowed.join(", ")}`);
+  throw new Error(`${label} harus salah satu dari: ${allowed.join(", ")}`);
 }

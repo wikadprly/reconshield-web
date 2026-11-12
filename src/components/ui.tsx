@@ -32,20 +32,20 @@ export function MetricCard({ title, value, detail, icon, tone = "blue", badge }:
  */
 export function MockNotice({ source }: { source?: DataSource }) {
   if (source === "database") {
-    return <div className="mock-notice live"><span>LIVE DATABASE</span> Values on this screen were read from the configured PostgreSQL database.</div>;
+    return <div className="mock-notice live"><span>DATABASE LANGSUNG</span> Nilai pada layar ini dibaca dari database MariaDB terkonfigurasi.</div>;
   }
   if (source === "remote") {
-    return <div className="mock-notice remote"><span>REMOTE SERVICE</span> Values on this screen were read from the configured Python ML service.</div>;
+    return <div className="mock-notice remote"><span>LAYANAN REMOTE</span> Nilai pada layar ini dibaca dari layanan Python ML terkonfigurasi.</div>;
   }
   if (source === "mixed") {
-    return <div className="mock-notice"><span>MIXED SOURCES</span> Parts of this screen come from the live database, others from a fallback source — each panel is labelled where it is shown.</div>;
+    return <div className="mock-notice"><span>SUMBER CAMPURAN</span> Sebagian layar ini berasal dari database langsung, sebagian dari sumber cadangan — setiap panel diberi label sesuai asalnya.</div>;
   }
-  return <div className="mock-notice"><span>PREVIEW DATA</span> Values and service states on this screen are illustrative and are not live network telemetry.</div>;
+  return <div className="mock-notice"><span>DATA PRATINJAU</span> Nilai dan status layanan pada layar ini bersifat ilustratif dan bukan telemetri jaringan langsung.</div>;
 }
 
 /** Inline loading / error banner used by the data-fetching client views. */
 export function DataStateNotice({ loading, error }: { loading: boolean; error: string | null }) {
-  if (error) return <div className="data-state error">Unable to load data from the backend: {error}</div>;
-  if (loading) return <div className="data-state loading">Loading data from the backend…</div>;
+  if (error) return <div className="data-state error">Gagal memuat data dari backend: {error}</div>;
+  if (loading) return <div className="data-state loading">Memuat data dari backend…</div>;
   return null;
 }

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 
 import { PrismaClient } from "@/generated/prisma/client";
 import { env } from "@/lib/env";
@@ -12,7 +12,7 @@ function createClient(): PrismaClient {
   if (!connectionString) {
     throw new Error("DATABASE_URL is not configured");
   }
-  const adapter = new PrismaPg({ connectionString });
+  const adapter = new PrismaMariaDb(connectionString);
   return new PrismaClient({ adapter });
 }
 

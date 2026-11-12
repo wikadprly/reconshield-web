@@ -24,7 +24,7 @@ function authHeaders(): Record<string, string> {
   const username = env.mikrotikUsername();
   const password = env.mikrotikPassword();
   if (!username || !password) {
-    throw new Error("MikroTik credentials are not configured");
+    throw new Error("Kredensial MikroTik belum dikonfigurasi");
   }
   return { Authorization: basicAuthHeader(username, password) };
 }

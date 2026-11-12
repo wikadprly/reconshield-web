@@ -11,7 +11,7 @@ export function formatTimestamp(value: string): string {
   if (!value.includes("T")) return value;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("en-GB", {
+  return date.toLocaleString("id-ID", {
     day: "2-digit",
     month: "short",
     year: "numeric",

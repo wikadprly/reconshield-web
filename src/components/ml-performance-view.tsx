@@ -4,6 +4,7 @@ import { Activity, BarChart3, CheckCircle2, Cpu, Database, Search, Target } from
 import FeatureImportanceChart from "@/components/feature-importance-chart";
 import { Badge, Card, CardHeader, DataStateNotice, MetricCard, MockNotice } from "@/components/ui";
 import { formatPercent, formatTimestamp } from "@/lib/format";
+import { labelSource } from "@/lib/labels";
 import { useApiResult } from "@/lib/use-api-result";
 import type { ModelMetrics } from "@/types/security";
 
@@ -16,31 +17,31 @@ export default function MlPerformanceView() {
   return <div className="page-stack">
     <MockNotice source={result?.source} />
     <DataStateNotice loading={loading} error={error} />
-    <div className="research-banner"><div><Badge tone="purple">RESEARCH EVALUATION</Badge><h2>{metrics?.modelName ?? "Random Forest Classifier"}</h2><p>Binary classification model for distinguishing normal network flows from reconnaissance activity.</p></div><div className="model-live"><span>Model status</span><Badge tone={result?.source === "mock" ? "warning" : "success"} dot>{result?.source ?? "unavailable"} · {metrics?.version ?? "—"}</Badge></div></div>
+    <div className="research-banner"><div><Badge tone="purple">EVALUASI PENELITIAN</Badge><h2>{metrics?.modelName ?? "Classifier Random Forest"}</h2><p>Model klasifikasi biner untuk membedakan flow jaringan normal dari aktivitas reconnaissance.</p></div><div className="model-live"><span>Status model</span><Badge tone={result?.source === "mock" ? "warning" : "success"} dot>{labelSource(result?.source)} · {metrics?.version ?? "—"}</Badge></div></div>
     <div className="metrics-grid four">
-      <MetricCard title="Accuracy" value={metrics ? formatPercent(metrics.accuracy) : "—"} detail="Overall correct predictions" icon={<CheckCircle2 size={20} />} />
-      <MetricCard title="Precision" value={metrics ? formatPercent(metrics.precision) : "—"} detail="Positive prediction quality" icon={<Target size={20} />} tone="purple" />
-      <MetricCard title="Recall" value={metrics ? formatPercent(metrics.recall) : "—"} detail="Threat detection sensitivity" icon={<Search size={20} />} tone="cyan" />
-      <MetricCard title="F1-Score" value={metrics ? formatPercent(metrics.f1Score) : "—"} detail="Balanced model performance" icon={<BarChart3 size={20} />} tone="green" />
+      <MetricCard title="Akurasi" value={metrics ? formatPercent(metrics.accuracy) : "—"} detail="Prediksi benar secara keseluruhan" icon={<CheckCircle2 size={20} />} />
+      <MetricCard title="Presisi" value={metrics ? formatPercent(metrics.precision) : "—"} detail="Kualitas prediksi positif" icon={<Target size={20} />} tone="purple" />
+      <MetricCard title="Recall" value={metrics ? formatPercent(metrics.recall) : "—"} detail="Sensitivitas deteksi ancaman" icon={<Search size={20} />} tone="cyan" />
+      <MetricCard title="Skor F1" value={metrics ? formatPercent(metrics.f1Score) : "—"} detail="Kinerja model yang seimbang" icon={<BarChart3 size={20} />} tone="green" />
     </div>
     <div className="ml-grid">
       <Card>
-        <CardHeader title="Confusion Matrix" subtitle="Classification outcomes on the evaluation dataset" />
-        <div className="matrix-wrap"><div className="matrix-axis top">Predicted class</div><div className="matrix-axis side">Actual class</div><div className="matrix-labels top-label"><span>Normal</span><span>Reconnaissance</span></div><div className="matrix-labels side-label"><span>Normal</span><span>Reconnaissance</span></div><div className="matrix"><div className="matrix-cell strong"><b>{(confusion?.trueNormal ?? 0).toLocaleString("en-US")}</b><span>True Normal</span><small>TN</small></div><div className="matrix-cell light"><b>{(confusion?.falseThreat ?? 0).toLocaleString("en-US")}</b><span>False Threat</span><small>FP</small></div><div className="matrix-cell light"><b>{(confusion?.missedThreat ?? 0).toLocaleString("en-US")}</b><span>Missed Threat</span><small>FN</small></div><div className="matrix-cell strong purple"><b>{(confusion?.trueThreat ?? 0).toLocaleString("en-US")}</b><span>True Threat</span><small>TP</small></div></div></div>
+        <CardHeader title="Matriks Konfusi" subtitle="Hasil klasifikasi pada dataset evaluasi" />
+        <div className="matrix-wrap"><div className="matrix-axis top">Kelas prediksi</div><div className="matrix-axis side">Kelas aktual</div><div className="matrix-labels top-label"><span>Normal</span><span>Reconnaissance</span></div><div className="matrix-labels side-label"><span>Normal</span><span>Reconnaissance</span></div><div className="matrix"><div className="matrix-cell strong"><b>{(confusion?.trueNormal ?? 0).toLocaleString("id-ID")}</b><span>Normal Benar</span><small>TN</small></div><div className="matrix-cell light"><b>{(confusion?.falseThreat ?? 0).toLocaleString("id-ID")}</b><span>Ancaman Palsu</span><small>FP</small></div><div className="matrix-cell light"><b>{(confusion?.missedThreat ?? 0).toLocaleString("id-ID")}</b><span>Ancaman Terlewat</span><small>FN</small></div><div className="matrix-cell strong purple"><b>{(confusion?.trueThreat ?? 0).toLocaleString("id-ID")}</b><span>Ancaman Benar</span><small>TP</small></div></div></div>
       </Card>
       <Card>
-        <CardHeader title="Feature Importance" subtitle="Relative contribution to model decisions" />
-        {metrics && metrics.featureImportance.length > 0 ? <FeatureImportanceChart data={metrics.featureImportance} /> : <div className="empty-table">No feature importance reported by the active source.</div>}
-        <div className="chart-footnote"><Activity size={15} /> Gini importance · higher values indicate stronger predictive influence</div>
+        <CardHeader title="Kepentingan Fitur" subtitle="Kontribusi relatif terhadap keputusan model" />
+        {metrics && metrics.featureImportance.length > 0 ? <FeatureImportanceChart data={metrics.featureImportance} /> : <div className="empty-table">Sumber aktif tidak melaporkan kepentingan fitur.</div>}
+        <div className="chart-footnote"><Activity size={15} /> Kepentingan Gini · nilai lebih tinggi menunjukkan pengaruh prediktif lebih kuat</div>
       </Card>
     </div>
     <Card>
-      <CardHeader title="Evaluation Context" subtitle="Dataset and experiment metadata for research auditability" />
+      <CardHeader title="Konteks Evaluasi" subtitle="Metadata dataset dan eksperimen untuk auditabilitas penelitian" />
       <div className="metadata-grid">
-        <div><span><Database size={17} />Dataset</span><b>{metrics?.dataset ?? "—"}</b><small>NetFlow/IPFIX labeled dataset</small></div>
-        <div><span><Activity size={17} />Evaluation date</span><b>{metrics?.evaluatedAt ? formatTimestamp(metrics.evaluatedAt) : "—"}</b><small>Latest recorded evaluation</small></div>
-        <div><span><BarChart3 size={17} />Number of samples</span><b>{samples !== null ? `${samples.toLocaleString("en-US")} flows` : "—"}</b><small>Sum of confusion-matrix outcomes</small></div>
-        <div><span><Cpu size={17} />Model configuration</span><b>100 estimators</b><small>max_depth=12 · random_state=42</small></div>
+        <div><span><Database size={17} />Dataset</span><b>{metrics?.dataset ?? "—"}</b><small>Dataset berlabel NetFlow/IPFIX</small></div>
+        <div><span><Activity size={17} />Tanggal evaluasi</span><b>{metrics?.evaluatedAt ? formatTimestamp(metrics.evaluatedAt) : "—"}</b><small>Evaluasi terakhir yang tercatat</small></div>
+        <div><span><BarChart3 size={17} />Jumlah sampel</span><b>{samples !== null ? `${samples.toLocaleString("id-ID")} flow` : "—"}</b><small>Jumlah hasil matriks konfusi</small></div>
+        <div><span><Cpu size={17} />Konfigurasi model</span><b>100 estimator</b><small>max_depth=12 · random_state=42</small></div>
       </div>
     </Card>
   </div>;

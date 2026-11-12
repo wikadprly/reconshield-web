@@ -3,20 +3,17 @@
 //
 // Run after `prisma migrate dev`:
 //   node --env-file=.env prisma/seed.mjs
-//
-// Uses raw SQL because the Prisma client is generated as TypeScript (src/generated/prisma),
-// which a plain Node process cannot import. IDs and updatedAt are supplied
-// explicitly because cuid()/updatedAt are client-side defaults, not database ones.
 
-import { Client } from "pg";
+import mariadb from "mariadb";
 
 const url = new URL(process.env.DATABASE_URL);
-const client = new Client({
-  user: url.username,
-  password: decodeURIComponent(url.password),
+const pool = mariadb.createPool({
   host: url.hostname,
-  port: url.port || 5432,
+  port: Number(url.port || 3306),
+  user: decodeURIComponent(url.username),
+  password: decodeURIComponent(url.password),
   database: url.pathname.replace(/^\//, "") || "reconshield",
+  connectionLimit: 1,
 });
 
 const detections = [
@@ -57,64 +54,86 @@ const featureImportance = [
   ["fi-5", "ACK Flag Count", 0.42],
 ];
 
-await client.connect();
+const tables = [
+  "feature_importances",
+  "model_evaluations",
+  "approvals",
+  "tarpit_entries",
+  "detections",
+  "service_statuses",
+  "audit_entries",
+  "mitigation_settings",
+];
+
+/** MariaDB/MySQL DATETIME rejects the ISO `T...Z` form, so normalise it. */
+function sqlDate(value) {
+  return new Date(value).toISOString().slice(0, 19).replace("T", " ");
+}
+
+const client = await pool.getConnection();
 try {
-  await client.query("BEGIN");
-  await client.query("TRUNCATE TABLE feature_importances, model_evaluations, detections, tarpit_entries, service_statuses, audit_entries, mitigation_settings CASCADE");
+  await client.query("SET FOREIGN_KEY_CHECKS = 0");
+  for (const table of tables) {
+    await client.query(`TRUNCATE TABLE \`${table}\``);
+  }
+  await client.query("SET FOREIGN_KEY_CHECKS = 1");
+
+  await client.beginTransaction();
 
   for (const [id, timestamp, sourceIp, sourcePort, destinationIp, destinationPort, classification, confidence, action, status] of detections) {
     await client.query(
-      `INSERT INTO detections (id, "timestamp", "sourceIp", "sourcePort", "destinationIp", "destinationPort", classification, confidence, action, status, "createdAt", "updatedAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now(), now())`,
-      [id, timestamp, sourceIp, sourcePort, destinationIp, destinationPort, classification, confidence, action, status],
+      `INSERT INTO detections (id, \`timestamp\`, \`sourceIp\`, \`sourcePort\`, \`destinationIp\`, \`destinationPort\`, classification, confidence, action, status, \`createdAt\`, \`updatedAt\`)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [id, sqlDate(timestamp), sourceIp, sourcePort, destinationIp, destinationPort, classification, confidence, action, status],
     );
   }
 
   for (const [id, ip, detectedAt, duration] of tarpitEntries) {
     await client.query(
-      `INSERT INTO tarpit_entries (id, ip, "detectedAt", duration, "addressList", status, "createdAt", "updatedAt")
-       VALUES ($1,$2,$3,$4,$5,'Active', now(), now())`,
-      [id, ip, detectedAt, duration, "reconshield-tarpit-active"],
+      `INSERT INTO tarpit_entries (id, ip, \`detectedAt\`, duration, \`addressList\`, status, \`createdAt\`, \`updatedAt\`)
+       VALUES (?, ?, ?, ?, ?, 'Active', NOW(), NOW())`,
+      [id, ip, sqlDate(detectedAt), duration, "reconshield-tarpit-active"],
     );
   }
 
   for (const [name, detail, status] of services) {
     await client.query(
-      `INSERT INTO service_statuses (name, detail, status, "checkedAt") VALUES ($1,$2,$3, now())`,
+      "INSERT INTO service_statuses (name, detail, status, `checkedAt`) VALUES (?, ?, ?, NOW())",
       [name, detail, status],
     );
   }
 
   for (const [id, timestamp, administrator, previousMode, newMode] of auditEntries) {
     await client.query(
-      `INSERT INTO audit_entries (id, "timestamp", administrator, "previousMode", "newMode", "createdAt")
-       VALUES ($1,$2,$3,$4,$5, now())`,
-      [id, timestamp, administrator, previousMode, newMode],
+      `INSERT INTO audit_entries (id, \`timestamp\`, administrator, \`previousMode\`, \`newMode\`, \`createdAt\`)
+       VALUES (?, ?, ?, ?, ?, NOW())`,
+      [id, sqlDate(timestamp), administrator, previousMode, newMode],
     );
   }
 
   await client.query(
-    `INSERT INTO mitigation_settings (id, mode, "updatedAt") VALUES ('default','Automatic', now())`,
+    "INSERT INTO mitigation_settings (id, mode, `updatedAt`) VALUES ('default', 'Automatic', NOW())",
   );
 
   await client.query(
-    `INSERT INTO model_evaluations (id, "modelName", version, accuracy, precision, recall, "f1Score", "trueNormal", "falseThreat", "missedThreat", "trueThreat", dataset, "evaluatedAt")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-    ["eval-1", "Random Forest Classifier", "v1.4.2", 97.84, 96.72, 95.91, 96.31, 9541, 117, 48, 1125, "ReconFlow-2026 v2", "2026-02-28T00:00:00.000Z"],
+    `INSERT INTO model_evaluations (id, \`modelName\`, version, \`accuracy\`, \`precision\`, \`recall\`, \`f1Score\`, \`trueNormal\`, \`falseThreat\`, \`missedThreat\`, \`trueThreat\`, dataset, \`evaluatedAt\`)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ["eval-1", "Random Forest Classifier", "v1.4.2", 97.84, 96.72, 95.91, 96.31, 9541, 117, 48, 1125, "ReconFlow-2026 v2", sqlDate("2026-02-28T00:00:00.000Z")],
   );
 
   for (const [id, feature, importance] of featureImportance) {
     await client.query(
-      `INSERT INTO feature_importances (id, feature, importance, "evaluationId") VALUES ($1,$2,$3,'eval-1')`,
+      "INSERT INTO feature_importances (id, feature, importance, `evaluationId`) VALUES (?, ?, ?, 'eval-1')",
       [id, feature, importance],
     );
   }
 
-  await client.query("COMMIT");
+  await client.commit();
   console.log(`seeded: ${detections.length} detections, ${tarpitEntries.length} tarpit, ${services.length} services, ${auditEntries.length} audit, ${featureImportance.length} features`);
 } catch (error) {
-  await client.query("ROLLBACK");
+  await client.rollback();
   throw error;
 } finally {
-  await client.end();
+  client.release();
+  await pool.end();
 }
