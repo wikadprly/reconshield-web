@@ -15,7 +15,8 @@ export interface ApiResultState<T> {
  * The route runs the server service layer (database → remote → mock), so the
  * returned `source` always reflects where the data actually came from.
  */
-export function useApiResult<T>(path: string): ApiResultState<T> {
+export function useApiResult<T>(path: string, options: { refreshMs?: number } = {}): ApiResultState<T> {
+  const { refreshMs } = options;
   const [result, setResult] = useState<ApiResult<T> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +55,25 @@ export function useApiResult<T>(path: string): ApiResultState<T> {
   }, [path]);
 
   useEffect(() => refresh(), [refresh]);
+
+  // Optional polling. Silent by design: it must not flash the loading banner on
+  // every tick, so `loading` stays owned by the first/manual load.
+  useEffect(() => {
+    if (!refreshMs || refreshMs <= 0) return;
+    const id = window.setInterval(() => {
+      fetch(path, { cache: "no-store" })
+        .then(async (response) => {
+          const body = (await response.json()) as ApiResult<T> | { error: string };
+          if (!response.ok) throw new Error("error" in body ? body.error : "refresh failed");
+          setResult(body as ApiResult<T>);
+          setError(null);
+        })
+        .catch(() => {
+          // Keep the last good value; a transient poll failure is not an error state.
+        });
+    }, refreshMs);
+    return () => window.clearInterval(id);
+  }, [path, refreshMs]);
 
   return { result, loading, error, refresh };
 }

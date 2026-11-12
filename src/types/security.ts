@@ -131,6 +131,21 @@ export interface SecurityOverview {
     tarpitActive: number;
     scoped: boolean;
   };
+  /**
+   * Rolling activity for the "is something happening right now?" panel.
+   * Counts are relative to the newest record so a seeded lab dataset still
+   * shows a meaningful window instead of an empty one.
+   */
+  activity: {
+    windowMinutes: number;
+    recent: number;
+    previous: number;
+    reconnaissanceRecent: number;
+    lastSeenAt?: string;
+    lastSourceIp?: string;
+    lastDestinationPort?: number;
+    referenceAt: string;
+  };
 }
 
 /** Live MikroTik `/system/resource` snapshot. */

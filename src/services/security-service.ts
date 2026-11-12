@@ -3,7 +3,7 @@ import "server-only";
 import { createApproval, decideApproval, findApprovals } from "@/db/repositories/approval.repo";
 import { findRecentAuditEntries } from "@/db/repositories/audit.repo";
 import { findEvidenceByDetection, saveEvidence, type EvidenceInput } from "@/db/repositories/evidence.repo";
-import { countDetections, findRecentDetections, findTrafficSeries, type TrafficPoint } from "@/db/repositories/detection.repo";
+import { countDetections, findActivity, findRecentDetections, findTrafficSeries, type TrafficPoint } from "@/db/repositories/detection.repo";
 import { findLatestModelMetrics } from "@/db/repositories/ml.repo";
 import { findMitigationPolicy, saveMitigationPolicy } from "@/db/repositories/policy.repo";
 import { findServiceStatuses } from "@/db/repositories/service.repo";
@@ -138,12 +138,36 @@ async function getTotals(): Promise<SecurityOverview["totals"]> {
   }
 }
 
+const ACTIVITY_WINDOW_MINUTES = 60;
+
+/** Rolling activity window; falls back to sample counts so the panel is honest. */
+async function getActivity(): Promise<SecurityOverview["activity"]> {
+  const empty = {
+    windowMinutes: ACTIVITY_WINDOW_MINUTES,
+    recent: 0,
+    previous: 0,
+    reconnaissanceRecent: 0,
+    referenceAt: new Date().toISOString(),
+  };
+
+  if (!env.databaseUrl()) return empty;
+
+  try {
+    const counts = await findActivity(ACTIVITY_WINDOW_MINUTES);
+    return { ...counts, windowMinutes: ACTIVITY_WINDOW_MINUTES };
+  } catch (error) {
+    console.error("[security-service] activity read failed:", error);
+    return empty;
+  }
+}
+
 export async function getSecurityOverview(): Promise<ApiResult<SecurityOverview>> {
-  const [detections, tarpit, services, totals] = await Promise.all([
+  const [detections, tarpit, services, totals, activity] = await Promise.all([
     getRecentDetections(100),
     getTarpitEntries(),
     getServiceStatuses(),
     getTotals(),
+    getActivity(),
   ]);
 
   // One label only when every part of the overview came from the same place.
@@ -160,6 +184,7 @@ export async function getSecurityOverview(): Promise<ApiResult<SecurityOverview>
       tarpit: tarpit.data,
       services: services.data,
       totals,
+      activity,
     },
     source,
     generatedAt: detections.generatedAt,

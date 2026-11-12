@@ -63,6 +63,50 @@ export async function findTrafficSeries(range: string, buckets = 7): Promise<Tra
   return series;
 }
 
+export interface ActivityCounts {
+  recent: number;
+  previous: number;
+  reconnaissanceRecent: number;
+  lastSeenAt?: string;
+  lastSourceIp?: string;
+  lastDestinationPort?: number;
+  referenceAt: string;
+}
+
+/**
+ * Rolling window counts used by the "current status" panel. Both windows are
+ * anchored to the newest record (not wall clock) so a seeded dataset is not
+ * reported as permanently idle.
+ */
+export async function findActivity(windowMinutes = 60): Promise<ActivityCounts> {
+  const prisma = getPrisma();
+  const newest = await prisma.detection.findFirst({ orderBy: { timestamp: "desc" } });
+  if (!newest) {
+    return { recent: 0, previous: 0, reconnaissanceRecent: 0, referenceAt: new Date().toISOString() };
+  }
+
+  const reference = newest.timestamp.getTime();
+  const windowMs = windowMinutes * 60_000;
+  const recentSince = new Date(reference - windowMs);
+  const previousSince = new Date(reference - windowMs * 2);
+
+  const [recent, reconnaissanceRecent, previous] = await Promise.all([
+    prisma.detection.count({ where: { timestamp: { gte: recentSince } } }),
+    prisma.detection.count({ where: { timestamp: { gte: recentSince }, classification: "Reconnaissance" } }),
+    prisma.detection.count({ where: { timestamp: { gte: previousSince, lt: recentSince } } }),
+  ]);
+
+  return {
+    recent,
+    previous,
+    reconnaissanceRecent,
+    lastSeenAt: newest.timestamp.toISOString(),
+    lastSourceIp: newest.sourceIp,
+    lastDestinationPort: newest.destinationPort,
+    referenceAt: new Date(reference).toISOString(),
+  };
+}
+
 export async function findRecentDetections(limit = 20): Promise<Detection[]> {
   const rows = await getPrisma().detection.findMany({
     orderBy: { timestamp: "desc" },
