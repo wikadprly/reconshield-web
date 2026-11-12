@@ -16,6 +16,9 @@ const statusLabels: Record<string, string> = {
   Review: "Tinjau",
   Released: "Dilepas",
   Resolved: "Selesai",
+  Pending: "Menunggu",
+  Expired: "Kedaluwarsa",
+  Verified: "Terverifikasi",
   Online: "Online",
   Offline: "Offline",
 };
@@ -54,6 +57,22 @@ const featureLabels: Record<string, string> = {
   "SYN Flag Count": "Jumlah Flag SYN",
   "Total Bytes": "Total Byte",
   "ACK Flag Count": "Jumlah Flag ACK",
+  prot: "Protokol",
+  tos: "Tipe Layanan",
+  tcp_flags: "Flag TCP",
+  sport: "Port Sumber",
+  dport: "Port Tujuan",
+  packets: "Jumlah Paket",
+  bytes: "Jumlah Byte",
+  duration_ms: "Durasi Flow (ms)",
+  bytes_per_pkt: "Byte per Paket",
+  pkts_per_sec: "Laju Paket",
+  f_fin: "Flag FIN",
+  f_syn: "Flag SYN",
+  f_rst: "Flag RST",
+  f_psh: "Flag PSH",
+  f_ack: "Flag ACK",
+  f_urg: "Flag URG",
 };
 
 export function labelClassification(value: string): string {

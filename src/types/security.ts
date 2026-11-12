@@ -14,20 +14,71 @@ export interface Detection {
   status: "Active" | "Review" | "Released" | "Resolved";
 }
 
+export type TarpitStatus = "Pending" | "Active" | "Released" | "Expired" | "Verified";
+
 export interface TarpitEntry {
+  id?: string;
   ip: string;
   detectedAt: string;
   duration: string;
+  durationMinutes?: number;
+  expiresAt?: string;
   addressList: string;
-  status: "Active";
+  status: TarpitStatus;
+  releasedAt?: string;
+  verifiedAt?: string;
+  detectionId?: string;
 }
+
+/** Snapshot that justifies one classification. Evidence, not model internals. */
+export interface ClassificationEvidence {
+  detectionId: string;
+  flowDirection: string;
+  features: Record<string, number>;
+  featureCount: number;
+  confidence: number;
+  modelName: string;
+  modelVersion: string;
+  policyVersion: string;
+  policySnapshot: MitigationPolicy;
+  createdAt: string;
+}
+
+export type ApprovalStatus = "pending" | "approved" | "rejected" | "cancelled";
+
+export interface ApprovalRequest {
+  id: string;
+  detectionId: string;
+  proposedAction: string;
+  status: ApprovalStatus;
+  requestedAt: string;
+  decidedAt?: string;
+  decidedById?: string;
+  reason?: string;
+  detection?: {
+    sourceIp: string;
+    confidence: number;
+    classification: string;
+  };
+}
+
+export type AuditAction =
+  | "policy_change"
+  | "approval_approved"
+  | "approval_rejected"
+  | "tarpit_release"
+  | "tarpit_verify"
+  | "tarpit_apply";
 
 export interface AuditEntry {
   id: string;
   timestamp: string;
   administrator: string;
-  previousMode: MitigationMode;
-  newMode: MitigationMode;
+  /** Policy mode before/after; only meaningful when `action` is policy_change. */
+  previousMode: string;
+  newMode: string;
+  action: AuditAction;
+  target?: string;
   reason?: string;
 }
 

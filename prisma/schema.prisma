@@ -32,6 +32,7 @@ model Detection {
 
   approvals     Approval[]
   tarpitEntries TarpitEntry[]
+  evidence      Evidence?
 
   @@index([timestamp])
   @@index([sourceIp])
@@ -40,23 +41,48 @@ model Detection {
   @@map("detections")
 }
 
-/// An address currently under Dynamic Tarpit mitigation.
+/// An address currently under (or previously under) Dynamic Tarpit mitigation.
+/// `status`: Pending | Active | Released | Expired | Verified.
 model TarpitEntry {
-  id          String     @id @default(cuid())
-  ip          String     @unique
-  detectedAt  DateTime
-  duration    String
-  addressList String
-  status      String
-  releasedAt  DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  detectionId String?
-  detection   Detection? @relation(fields: [detectionId], references: [id], onDelete: SetNull)
+  id            String    @id @default(cuid())
+  ip            String    @unique
+  detectedAt    DateTime
+  duration      String
+  durationMinutes Int     @default(60)
+  expiresAt     DateTime?
+  addressList   String
+  status        String
+  releasedAt    DateTime?
+  verifiedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  detectionId   String?
+  detection     Detection? @relation(fields: [detectionId], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([detectionId])
+  @@index([expiresAt])
   @@map("tarpit_entries")
+}
+
+/// Snapshot that justifies one classification decision. Stored as an explicit
+/// "bukti klasifikasi" (evidence), not as a claim about Random Forest internals.
+model Evidence {
+  id               String   @id @default(cuid())
+  detectionId      String   @unique
+  detection        Detection @relation(fields: [detectionId], references: [id], onDelete: Cascade)
+  flowDirection    String   @default("external_to_protected")
+  features         Json
+  featureCount     Int
+  confidence       Float
+  modelName        String
+  modelVersion     String
+  policyVersion    String
+  policySnapshot   Json
+  createdAt        DateTime @default(now())
+
+  @@index([modelVersion])
+  @@map("evidence")
 }
 
 /// Status of an external dependency (MikroTik RouterOS, Random Forest service).
@@ -76,6 +102,8 @@ model AuditEntry {
   administrator     String
   previousMode      String
   newMode           String
+  action            String   @default("policy_change")
+  target            String?
   reason            String?
   createdAt         DateTime @default(now())
   administratorId   String?

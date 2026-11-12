@@ -2,9 +2,9 @@ import "server-only";
 
 import { getPrisma } from "@/db/prisma";
 import { assertOneOf } from "@/lib/validation";
-import type { AuditEntry, MitigationMode } from "@/types/security";
+import type { AuditAction, AuditEntry } from "@/types/security";
 
-const MODES = ["Automatic", "Manual"] as const;
+const ACTIONS = ["policy_change", "approval_approved", "approval_rejected", "tarpit_release", "tarpit_verify", "tarpit_apply"] as const;
 
 export async function findRecentAuditEntries(limit = 20): Promise<AuditEntry[]> {
   const rows = await getPrisma().auditEntry.findMany({
@@ -16,8 +16,10 @@ export async function findRecentAuditEntries(limit = 20): Promise<AuditEntry[]> 
     id: row.id,
     timestamp: row.timestamp.toISOString(),
     administrator: row.administrator,
-    previousMode: assertOneOf<MitigationMode>(row.previousMode, MODES, "auditEntry.previousMode"),
-    newMode: assertOneOf<MitigationMode>(row.newMode, MODES, "auditEntry.newMode"),
+    previousMode: row.previousMode,
+    newMode: row.newMode,
+    action: assertOneOf<AuditAction>(row.action, ACTIONS, "auditEntry.action"),
+    target: row.target ?? undefined,
     reason: row.reason ?? undefined,
   }));
 }

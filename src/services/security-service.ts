@@ -1,16 +1,20 @@
 import "server-only";
 
+import { createApproval, decideApproval, findApprovals } from "@/db/repositories/approval.repo";
 import { findRecentAuditEntries } from "@/db/repositories/audit.repo";
+import { findEvidenceByDetection, saveEvidence, type EvidenceInput } from "@/db/repositories/evidence.repo";
 import { countDetections, findRecentDetections } from "@/db/repositories/detection.repo";
 import { findLatestModelMetrics } from "@/db/repositories/ml.repo";
 import { findMitigationPolicy, saveMitigationPolicy } from "@/db/repositories/policy.repo";
 import { findServiceStatuses } from "@/db/repositories/service.repo";
-import { countActiveTarpitEntries, findActiveTarpitEntries } from "@/db/repositories/tarpit.repo";
+import { countActiveTarpitEntries, findActiveTarpitEntries, markTarpitReleased, markTarpitVerified } from "@/db/repositories/tarpit.repo";
 import { auditEntries as mockAudit, detections as mockDetections, mitigationPolicy as mockPolicy, modelMetrics as mockMetrics, services as mockServices, tarpitEntries as mockTarpit } from "@/data/mock-security";
 import { env } from "@/lib/env";
 import { parsePolicyPayload } from "@/lib/policy";
+import { isIpAddress } from "@/lib/validation";
 import { fetchModelMetrics, isMlConfigured } from "@/services/ml-service";
-import type { ApiResult, AuditEntry, DataSource, Detection, MitigationMode, MitigationPolicy, ModelMetrics, SecurityOverview, ServiceStatus, TarpitEntry } from "@/types/security";
+import { listTarpitAddressList } from "@/services/mikrotik-service";
+import type { ApiResult, ApprovalRequest, ApprovalStatus, AuditEntry, ClassificationEvidence, DataSource, Detection, MitigationMode, MitigationPolicy, ModelMetrics, SecurityOverview, ServiceStatus, TarpitEntry } from "@/types/security";
 
 /** Local-network stand-in until authentication exists (audit actor). */
 export const LOCAL_ACTOR = "admin lokal";
@@ -172,6 +176,73 @@ export async function updateMitigationPolicy(
   const rawReason = (payload as { reason?: unknown }).reason;
   const reason = typeof rawReason === "string" && rawReason.trim() !== "" ? rawReason.trim().slice(0, 200) : undefined;
   return saveMitigationPolicy(policy, { ...actor, reason });
+}
+
+// --- Approval center -------------------------------------------------------
+
+export async function getApprovals(status?: ApprovalStatus): Promise<ApiResult<ApprovalRequest[]>> {
+  return fromDatabaseOrMock(
+    () => findApprovals(status),
+    () => [],
+  );
+}
+
+export async function requestApproval(input: { detectionId: string; proposedAction: string; reason?: string }): Promise<ApprovalRequest> {
+  if (!env.databaseUrl()) throw new Error("DATABASE_URL tidak dikonfigurasi.");
+  if (!input.detectionId || !input.proposedAction) throw new Error("detectionId dan proposedAction wajib diisi.");
+  return createApproval(input);
+}
+
+export async function decideApprovalRequest(
+  id: string,
+  decision: "approved" | "rejected",
+  reason?: string,
+  actor: { administrator: string; administratorId?: string } = { administrator: LOCAL_ACTOR },
+): Promise<ApprovalRequest> {
+  if (!env.databaseUrl()) throw new Error("DATABASE_URL tidak dikonfigurasi.");
+  return decideApproval({ id, decision, reason, actor });
+}
+
+// --- Evidence --------------------------------------------------------------
+
+export async function getEvidence(detectionId: string): Promise<ApiResult<ClassificationEvidence | null>> {
+  return fromDatabaseOrMock(
+    () => findEvidenceByDetection(detectionId),
+    () => null,
+  );
+}
+
+export async function storeEvidence(input: EvidenceInput): Promise<ClassificationEvidence> {
+  if (!env.databaseUrl()) throw new Error("DATABASE_URL tidak dikonfigurasi.");
+  return saveEvidence(input);
+}
+
+// --- Tarpit release / verify ----------------------------------------------
+
+export async function releaseTarpitIp(ip: string, reason?: string, actor: { administrator: string; administratorId?: string } = { administrator: LOCAL_ACTOR }): Promise<TarpitEntry> {
+  if (!env.databaseUrl()) throw new Error("DATABASE_URL tidak dikonfigurasi.");
+  if (!isIpAddress(ip)) throw new Error("Alamat IP tidak valid.");
+  return markTarpitReleased({ ip, reason, actor });
+}
+
+/**
+ * Read-only verification against RouterOS. When RouterOS is not configured the
+ * result is reported as "tidak dapat diverifikasi" instead of claiming success.
+ */
+export async function verifyTarpitIp(ip: string, actor: { administrator: string; administratorId?: string } = { administrator: LOCAL_ACTOR }): Promise<{ ip: string; present: boolean | null; detail: string }> {
+  if (!isIpAddress(ip)) throw new Error("Alamat IP tidak valid.");
+  if (!env.mikrotikApiUrl()) {
+    return { ip, present: null, detail: "RouterOS belum dikonfigurasi; verifikasi tidak dapat dilakukan." };
+  }
+
+  const entries = await listTarpitAddressList("reconshield-tarpit-active");
+  const present = entries.includes(ip);
+
+  if (env.databaseUrl()) {
+    await markTarpitVerified({ ip, present, actor });
+  }
+
+  return { ip, present, detail: present ? "IP ditemukan di address-list." : "IP tidak ditemukan di address-list." };
 }
 
 // Router write operations remain disabled in the read-only phase. When they

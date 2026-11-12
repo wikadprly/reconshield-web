@@ -54,9 +54,9 @@ export const services: ServiceStatus[] = [
 ];
 
 export const auditEntries: AuditEntry[] = [
-  { id: "AUD-003", timestamp: "10 Mar 2026, 20:15", administrator: "admin", previousMode: "Manual", newMode: "Automatic" },
-  { id: "AUD-002", timestamp: "08 Mar 2026, 09:42", administrator: "admin", previousMode: "Automatic", newMode: "Manual" },
-  { id: "AUD-001", timestamp: "01 Mar 2026, 14:10", administrator: "peneliti", previousMode: "Manual", newMode: "Automatic" },
+  { id: "AUD-003", timestamp: "10 Mar 2026, 20:15", administrator: "admin", previousMode: "Manual", newMode: "Automatic", action: "policy_change" },
+  { id: "AUD-002", timestamp: "08 Mar 2026, 09:42", administrator: "admin", previousMode: "Automatic", newMode: "Manual", action: "policy_change" },
+  { id: "AUD-001", timestamp: "01 Mar 2026, 14:10", administrator: "peneliti", previousMode: "Manual", newMode: "Automatic", action: "policy_change" },
 ];
 
 export const mitigationPolicy: MitigationPolicy = {

@@ -6,9 +6,9 @@ import DetectionTable from "@/components/detection-table";
 import { Modal } from "@/components/modal";
 import { Badge, Button, Card, CardHeader, DataStateNotice, MockNotice } from "@/components/ui";
 import { formatTimestamp, parseTimestamp } from "@/lib/format";
-import { labelAction, labelClassification, labelSource, labelStatus } from "@/lib/labels";
+import { labelAction, labelClassification, labelFeature, labelSource, labelStatus } from "@/lib/labels";
 import { useApiResult } from "@/lib/use-api-result";
-import type { Detection } from "@/types/security";
+import type { ClassificationEvidence, Detection } from "@/types/security";
 
 type DateRange = "24h" | "7d" | "30d";
 const RANGE_HOURS: Record<DateRange, number> = { "24h": 24, "7d": 24 * 7, "30d": 24 * 30 };
@@ -24,7 +24,28 @@ export default function ThreatLogsView() {
   const [dateRange, setDateRange] = useState<DateRange>("24h");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Detection | null>(null);
+  const [evidence, setEvidence] = useState<ClassificationEvidence | null>(null);
+  const [evidenceState, setEvidenceState] = useState<"idle" | "loading" | "missing" | "error">("idle");
   const pageSize = 5;
+
+  async function openDetail(row: Detection) {
+    setSelected(row);
+    setEvidence(null);
+    setEvidenceState("loading");
+    try {
+      const response = await fetch(`/api/evidence/${encodeURIComponent(row.id)}`, { cache: "no-store" });
+      const body = (await response.json()) as { data?: ClassificationEvidence | null };
+      if (!response.ok) throw new Error("failed");
+      if (body.data) {
+        setEvidence(body.data);
+        setEvidenceState("idle");
+      } else {
+        setEvidenceState("missing");
+      }
+    } catch {
+      setEvidenceState("error");
+    }
+  }
 
   const reference = useMemo(() => {
     const times = detections
@@ -66,7 +87,23 @@ export default function ThreatLogsView() {
     <DataStateNotice loading={loading} error={error} />
     <div className="page-action-row"><div className="context-note"><Shield size={20} /><div><strong>Repositori bukti insiden</strong><span>Catatan klasifikasi dan mitigasi disimpan sebagai bukti terpisah.</span></div></div><div className="button-row"><Button variant="secondary" onClick={() => window.print()}><Download size={15} />Ekspor PDF</Button><Button onClick={exportCsv}><Download size={15} />Ekspor CSV</Button></div></div>
     <Card><div className="filters"><label className="search-field"><Search size={17} /><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Cari IP atau ID insiden..." /></label><label className="filter-field"><span>Rentang tanggal</span><select value={dateRange} onChange={(event) => { setDateRange(event.target.value as DateRange); setPage(1); }}><option value="24h">24 jam terakhir</option><option value="7d">7 hari terakhir</option><option value="30d">30 hari terakhir</option></select></label><label className="filter-field"><span>Klasifikasi</span><select value={classification} onChange={(event) => { setClassification(event.target.value); setPage(1); }}><option>{ALL_CLASSIFICATIONS}</option><option>Reconnaissance</option><option>Normal</option></select></label><label className="filter-field"><span>Tindakan</span><select value={action} onChange={(event) => { setAction(event.target.value); setPage(1); }}><option>{ALL_ACTIONS}</option><option value="TARPIT">TARPIT</option><option value="Pending">Tertunda</option><option value="Blocked">Diblokir</option></select></label></div></Card>
-    <Card><CardHeader title="Insiden Keamanan" subtitle={`${filtered.length} catatan cocok dengan filter saat ini`} action={<Badge tone="info"><SlidersHorizontal size={12} />Tampilan terfilter</Badge>} /><DetectionTable rows={visibleRows} onSelect={setSelected} /><div className="pagination"><span>Menampilkan {visibleRows.length} dari {filtered.length} catatan yang cocok</span><div><button disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Sebelumnya</button>{Array.from({ length: pageCount }, (_, index) => index + 1).map((value) => <button key={value} className={currentPage === value ? "active" : ""} onClick={() => setPage(value)}>{value}</button>)}<button disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>Berikutnya</button></div></div></Card>
-    {selected && <Modal title={`Insiden ${selected.id}`} confirmText="Tutup detail" onCancel={() => setSelected(null)} onConfirm={() => setSelected(null)}><div className="detail-grid"><div><span>Endpoint sumber</span><b className="mono">{selected.sourceIp}:{selected.sourcePort}</b></div><div><span>Endpoint tujuan</span><b className="mono">{selected.destinationIp}:{selected.destinationPort}</b></div><div><span>Klasifikasi</span><Badge tone={selected.classification === "Reconnaissance" ? "danger" : "success"}>{labelClassification(selected.classification)}</Badge></div><div><span>Keyakinan</span><b>{selected.confidence.toFixed(1)}%</b></div><div><span>Tindakan</span><Badge tone="purple">{labelAction(selected.action)}</Badge></div><div><span>Status</span><Badge tone="success" dot>{labelStatus(selected.status)}</Badge></div><div><span>Waktu</span><b>{formatTimestamp(selected.timestamp)}</b></div><div><span>Sumber</span><b>{labelSource(result?.source)}</b></div></div><p className="detail-note">Catatan ini dibaca dari sumber data {labelSource(result?.source)}. Tidak ada klaim tentang klasifikasi langsung atau tindakan router selain yang dilaporkan backend.</p></Modal>}
+    <Card><CardHeader title="Insiden Keamanan" subtitle={`${filtered.length} catatan cocok dengan filter saat ini`} action={<Badge tone="info"><SlidersHorizontal size={12} />Tampilan terfilter</Badge>} /><DetectionTable rows={visibleRows} onSelect={openDetail} /><div className="pagination"><span>Menampilkan {visibleRows.length} dari {filtered.length} catatan yang cocok</span><div><button disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Sebelumnya</button>{Array.from({ length: pageCount }, (_, index) => index + 1).map((value) => <button key={value} className={currentPage === value ? "active" : ""} onClick={() => setPage(value)}>{value}</button>)}<button disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>Berikutnya</button></div></div></Card>
+    {selected && <Modal title={`Insiden ${selected.id}`} confirmText="Tutup detail" onCancel={() => setSelected(null)} onConfirm={() => setSelected(null)}><div className="detail-grid"><div><span>Endpoint sumber</span><b className="mono">{selected.sourceIp}:{selected.sourcePort}</b></div><div><span>Endpoint tujuan</span><b className="mono">{selected.destinationIp}:{selected.destinationPort}</b></div><div><span>Klasifikasi</span><Badge tone={selected.classification === "Reconnaissance" ? "danger" : "success"}>{labelClassification(selected.classification)}</Badge></div><div><span>Keyakinan</span><b>{selected.confidence.toFixed(1)}%</b></div><div><span>Tindakan</span><Badge tone="purple">{labelAction(selected.action)}</Badge></div><div><span>Status</span><Badge tone="success" dot>{labelStatus(selected.status)}</Badge></div><div><span>Waktu</span><b>{formatTimestamp(selected.timestamp)}</b></div><div><span>Sumber</span><b>{labelSource(result?.source)}</b></div></div>
+      <div className="evidence-block">
+        <h3>Bukti klasifikasi</h3>
+        {evidenceState === "loading" && <p className="detail-note">Memuat bukti klasifikasi…</p>}
+        {evidenceState === "missing" && <p className="detail-note">Belum ada snapshot bukti tersimpan untuk insiden ini (mis. data seed yang dibuat sebelum fitur evidence).</p>}
+        {evidenceState === "error" && <p className="detail-note">Bukti klasifikasi gagal dimuat.</p>}
+        {evidence && <>
+          <div className="detail-grid">
+            <div><span>Model</span><b>{evidence.modelName} · {evidence.modelVersion}</b></div>
+            <div><span>Versi kebijakan</span><b>{evidence.policyVersion}</b></div>
+            <div><span>Arah flow</span><b>{evidence.flowDirection}</b></div>
+            <div><span>Jumlah fitur</span><b>{evidence.featureCount} / 16</b></div>
+          </div>
+          <div className="table-scroll"><table><thead><tr><th>Fitur</th><th>Nilai</th></tr></thead><tbody>{Object.entries(evidence.features).map(([name, value]) => <tr key={name}><td>{labelFeature(name)}</td><td>{Number(value).toFixed(4)}</td></tr>)}</tbody></table></div>
+        </>}
+      </div>
+      <p className="detail-note">Bukti klasifikasi adalah snapshot fitur, keyakinan, dan versi model/kebijakan — bukan klaim tentang alasan internal Random Forest. Tidak ada klaim tindakan router selain yang dilaporkan backend.</p></Modal>}
   </div>;
 }

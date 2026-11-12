@@ -18,4 +18,13 @@ export const env = {
   mikrotikPassword: () => read("MIKROTIK_PASSWORD"),
   /** Mock data is opt-out: it is used unless explicitly disabled. */
   useMockData: () => read("RECONSHIELD_USE_MOCK_DATA") !== "false",
+  /**
+   * Router writes are opt-in. Even with RouterOS configured, nothing is written
+   * to the device unless this is exactly "true".
+   */
+  routerWritesEnabled: () => read("RECONSHIELD_ENABLE_ROUTER_WRITES") === "true",
+  maxRouterWritesPerMinute: () => {
+    const parsed = Number(read("RECONSHIELD_MAX_ROUTER_WRITES_PER_MINUTE") ?? "5");
+    return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 30) : 5;
+  },
 };

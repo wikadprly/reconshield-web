@@ -74,6 +74,7 @@ export async function saveMitigationPolicy(
         administratorId: actor.administratorId ?? null,
         previousMode: previous.mode,
         newMode: updated.mode,
+        action: "policy_change",
         reason: actor.reason ?? null,
       },
     });

@@ -46,6 +46,36 @@ const auditEntries = [
   ["AUD-001", "2026-03-01T14:10:00.000Z", "researcher", "Manual", "Automatic"],
 ];
 
+const policySnapshot = {
+  mode: "Automatic",
+  confidenceThreshold: 85,
+  durationMinutes: 60,
+  maxDurationMinutes: 360,
+  maxActiveEntries: 50,
+  addressList: "reconshield-tarpit-active",
+};
+
+function featureVector(overrides = {}) {
+  return {
+    prot: 6, tos: 0, tcp_flags: 2, sport: 40000, dport: 22,
+    packets: 3, bytes: 180, duration_ms: 12, bytes_per_pkt: 60,
+    pkts_per_sec: 250, f_fin: 0, f_syn: 1, f_rst: 0, f_psh: 0,
+    f_ack: 0, f_urg: 0, ...overrides,
+  };
+}
+
+const evidenceRows = [
+  ["ev-1", "INC-1056", 98.5, featureVector({ sport: 42132, dport: 22 })],
+  ["ev-2", "INC-1053", 91.4, featureVector({ sport: 33451, dport: 443, f_syn: 1, f_ack: 1 })],
+  ["ev-3", "INC-1049", 87.9, featureVector({ sport: 60112, dport: 8080, packets: 8, bytes: 512 })],
+];
+
+// [id, detectionId, proposedAction, requestedAt] — status is always "pending".
+const approvals = [
+  ["apr-1", "INC-1053", "TARPIT", "2026-03-10T21:29:00.000Z"],
+  ["apr-2", "INC-1049", "TARPIT", "2026-03-10T20:24:00.000Z"],
+];
+
 const featureImportance = [
   ["fi-1", "Flow Duration", 0.89],
   ["fi-2", "Total Packets", 0.74],
@@ -58,6 +88,7 @@ const tables = [
   "feature_importances",
   "model_evaluations",
   "approvals",
+  "evidence",
   "tarpit_entries",
   "detections",
   "service_statuses",
@@ -67,7 +98,9 @@ const tables = [
 
 /** MariaDB/MySQL DATETIME rejects the ISO `T...Z` form, so normalise it. */
 function sqlDate(value) {
-  return new Date(value).toISOString().slice(0, 19).replace("T", " ");
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error(`sqlDate: invalid date ${value}`);
+  return date.toISOString().slice(0, 19).replace("T", " ");
 }
 
 const client = await pool.getConnection();
@@ -88,11 +121,28 @@ try {
     );
   }
 
+  for (const [id, detectionId, confidence, features] of evidenceRows) {
+    await client.query(
+      `INSERT INTO evidence (id, \`detectionId\`, \`flowDirection\`, features, \`featureCount\`, confidence, \`modelName\`, \`modelVersion\`, \`policyVersion\`, \`policySnapshot\`, \`createdAt\`)
+       VALUES (?, ?, 'external_to_protected', ?, 16, ?, 'Random Forest Classifier', 'v1.4.2', 'policy-2026-03-10', ?, NOW())`,
+      [id, detectionId, JSON.stringify(features), confidence, JSON.stringify(policySnapshot)],
+    );
+  }
+
+  for (const [id, detectionId, action, requestedAt] of approvals) {
+    // status is fixed to 'pending' by the INSERT below
+    await client.query(
+      `INSERT INTO approvals (id, \`detectionId\`, \`proposedAction\`, status, \`requestedAt\`)
+       VALUES (?, ?, ?, 'pending', ?)`,
+      [id, detectionId, action, sqlDate(requestedAt)],
+    );
+  }
+
   for (const [id, ip, detectedAt, duration] of tarpitEntries) {
     await client.query(
-      `INSERT INTO tarpit_entries (id, ip, \`detectedAt\`, duration, \`addressList\`, status, \`createdAt\`, \`updatedAt\`)
-       VALUES (?, ?, ?, ?, ?, 'Active', NOW(), NOW())`,
-      [id, ip, sqlDate(detectedAt), duration, "reconshield-tarpit-active"],
+      `INSERT INTO tarpit_entries (id, ip, \`detectedAt\`, duration, \`durationMinutes\`, \`expiresAt\`, \`addressList\`, status, \`createdAt\`, \`updatedAt\`)
+       VALUES (?, ?, ?, ?, 60, DATE_ADD(?, INTERVAL 60 MINUTE), ?, 'Active', NOW(), NOW())`,
+      [id, ip, sqlDate(detectedAt), duration, sqlDate(detectedAt), "reconshield-tarpit-active"],
     );
   }
 
