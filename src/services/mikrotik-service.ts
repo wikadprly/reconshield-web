@@ -2,6 +2,7 @@ import "server-only";
 
 import { env } from "@/lib/env";
 import { basicAuthHeader, requestJson } from "@/lib/http";
+import { createRateLimiter, type RateLimiter } from "@/lib/rate-limit";
 
 /**
  * Server-only client for the MikroTik RouterOS REST API.
@@ -27,6 +28,29 @@ function authHeaders(): Record<string, string> {
     throw new Error("Kredensial MikroTik belum dikonfigurasi");
   }
   return { Authorization: basicAuthHeader(username, password) };
+}
+
+let writeLimiter: RateLimiter | undefined;
+
+/** Shared limiter so every router write respects the same per-minute budget. */
+function routerWriteLimiter(): RateLimiter {
+  if (!writeLimiter) {
+    writeLimiter = createRateLimiter({ limit: env.maxRouterWritesPerMinute() });
+  }
+  return writeLimiter;
+}
+
+/**
+ * Reserve one slot in the per-minute router-write budget. Returns a refusal
+ * detail instead of throwing so the caller can record an honest audit entry.
+ */
+function acquireWriteSlot(): { ok: true } | { ok: false; detail: string } {
+  const decision = routerWriteLimiter().tryAcquire();
+  if (decision.allowed) return { ok: true };
+  return {
+    ok: false,
+    detail: `Batas tulis router (${env.maxRouterWritesPerMinute()}/menit) tercapai; coba lagi dalam ${Math.ceil(decision.retryAfterMs / 1000)} detik.`,
+  };
 }
 
 export async function listTarpitAddressList(addressList: string): Promise<string[]> {
@@ -55,6 +79,9 @@ export async function addTarpitAddress(addressList: string, ip: string): Promise
     return { ok: false, detail: "RouterOS belum dikonfigurasi." };
   }
 
+  const slot = acquireWriteSlot();
+  if (!slot.ok) return slot;
+
   await requestJson<unknown>(`${baseUrl.replace(/\/$/, "")}/rest/ip/firewall/address-list`, {
     method: "POST",
     headers: authHeaders(),
@@ -74,6 +101,9 @@ export async function removeTarpitAddress(addressList: string, ip: string): Prom
   if (!baseUrl) {
     return { ok: false, detail: "RouterOS belum dikonfigurasi." };
   }
+
+  const slot = acquireWriteSlot();
+  if (!slot.ok) return slot;
 
   const query = new URLSearchParams({ list: addressList, address: ip });
   const existing = await requestJson<Array<{ ".id"?: string }>>(

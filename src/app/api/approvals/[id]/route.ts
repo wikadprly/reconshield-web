@@ -17,12 +17,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   try {
     const { id } = await params;
-    const approval = await decideApprovalRequest(
+    const outcome = await decideApprovalRequest(
       id,
       body.decision,
       typeof body.reason === "string" ? body.reason.slice(0, 200) : undefined,
     );
-    return Response.json({ data: approval });
+    return Response.json({
+      data: outcome.approval,
+      mitigation: outcome.mitigation,
+      mitigationError: outcome.mitigationError,
+    });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Gagal memutuskan persetujuan." }, { status: 400 });
   }

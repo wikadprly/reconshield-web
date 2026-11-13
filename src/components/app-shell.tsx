@@ -35,8 +35,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [notificationsRead, setNotificationsRead] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
   const menusRef = useRef<HTMLDivElement>(null);
-  const { result: overview } = useApiResult<SecurityOverview>("/api/overview");
-  const { result: approvals } = useApiResult<ApprovalRequest[]>("/api/approvals?status=pending");
+  const { result: overview } = useApiResult<SecurityOverview>("/api/overview", { refreshMs: 10_000 });
+  const { result: approvals } = useApiResult<ApprovalRequest[]>("/api/approvals?status=pending", { refreshMs: 10_000 });
   const tarpitCount = overview?.data.tarpit.length ?? 0;
   const services = overview?.data.services ?? [];
   const pendingApprovals = approvals?.data.length ?? 0;

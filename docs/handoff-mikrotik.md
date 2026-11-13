@@ -1,8 +1,10 @@
 # Serah-Terima Bagian MikroTik
 
-> **Tanggal:** 12 November 2026
+> **Tanggal:** 12 November 2026 (diperbarui: write path A4)
 > **Branch kerja:** `gabungan-main-mikrotik` (di repo `reconshield-web`)
-> **Status web:** selesai sampai tahap baca + tulis DB; tulis router masih digerbangi.
+> **Status web:** write path tarpit (A4) sudah diimplementasikan end-to-end — guardrail,
+> tulis address-list RouterOS, simpan `tarpit_entries` + audit. Masih digerbangi
+> `RECONSHIELD_ENABLE_ROUTER_WRITES` dan menunggu uji nyata di hAP lite.
 
 Dokumen ini menjelaskan **apa yang sudah disiapkan di sisi web** dan **apa yang masih harus dikerjakan di sisi MikroTik**.
 
@@ -38,10 +40,14 @@ Bagian yang **sudah diambil selektif** ke `gabungan-main-mikrotik`:
 | Baca address-list (REST) | `mikrotik-service.ts::listTarpitAddressList` | Ya |
 | Tambah IP ke tarpit (REST) | `mikrotik-service.ts::addTarpitAddress` | Ya + gerbang |
 | Hapus IP dari tarpit (REST) | `mikrotik-service.ts::removeTarpitAddress` | Ya + gerbang |
-| Release di DB + audit | `DELETE /api/tarpit/{ip}` | Tidak |
+| Terapkan tarpit untuk insiden (guardrail → router → DB + audit) | `security-service.ts::applyTarpitForDetection`, `POST /api/tarpit` | Ya + gerbang |
+| Approve di Pusat Persetujuan (mengeksekusi tarpit) | `PATCH /api/approvals/{id}` | Ya + gerbang |
+| Release (hapus address-list + status DB + audit) | `DELETE /api/tarpit/{ip}` | Ya + gerbang |
 | Verify DB vs router | `POST /api/tarpit/{ip}` | Ya (baca) |
 
-**Gerbang tulis:** `RECONSHIELD_ENABLE_ROUTER_WRITES=true`. Default `false`. Tanpa itu, fungsi tulis langsung mengembalikan "Write path dinonaktifkan" dan **tidak menyentuh router**.
+**Gerbang tulis:** `RECONSHIELD_ENABLE_ROUTER_WRITES=true`. Default `false`. Tanpa itu, fungsi tulis langsung mengembalikan "Write path dinonaktifkan" dan **tidak menyentuh router**; entri tetap dicatat di DB sebagai `Pending` dengan alasan jujur.
+
+**Rate-limit tulis:** `RECONSHIELD_MAX_ROUTER_WRITES_PER_MINUTE` (default 5, maksimum 30) membatasi jumlah tulis address-list per menit; permintaan di atas batas ditolak dengan sisa waktu tunggu.
 
 ---
 
@@ -116,10 +122,12 @@ RECONSHIELD_ENABLE_ROUTER_WRITES="true"
 
 Lalu uji **satu IP** dulu, jangan banyak:
 
-1. Tambah IP lewat fungsi `addTarpitAddress` (atau endpoint bila nanti disambungkan).
+1. Dari web, tekan **Mitigasi** pada satu insiden reconnaissance di Log Ancaman (memanggil
+   `POST /api/tarpit`), atau setujui satu item di Pusat Persetujuan.
 2. Cek di RouterOS: `/ip firewall address-list print where list=reconshield-tarpit-active`
 3. Cek di web: `POST /api/tarpit/{ip}` → harus `present: true`
-4. Hapus IP lewat `removeTarpitAddress`, lalu verifikasi lagi → `present: false`
+4. Tekan **Lepas** di halaman Tarpit Aktif (memanggil `DELETE /api/tarpit/{ip}`), lalu verifikasi
+   lagi → `present: false`
 5. **Kembalikan** `RECONSHIELD_ENABLE_ROUTER_WRITES="false"` setelah uji
 
 ### Langkah 5 — Uji black-box (BB-N, bagian laporan)

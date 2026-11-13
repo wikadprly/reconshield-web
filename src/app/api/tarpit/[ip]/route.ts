@@ -3,7 +3,7 @@ import { releaseTarpitIp, verifyTarpitIp } from "@/services/security-service";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** Release one IP. Database-only: the RouterOS removal is the write path (A4). */
+/** Release one IP: remove it from the RouterOS address-list, then mark it Released. */
 export async function DELETE(request: Request, { params }: { params: Promise<{ ip: string }> }) {
   let reason: string | undefined;
   try {
@@ -15,8 +15,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   try {
     const { ip } = await params;
-    const entry = await releaseTarpitIp(decodeURIComponent(ip), reason);
-    return Response.json({ data: entry });
+    const outcome = await releaseTarpitIp(decodeURIComponent(ip), reason);
+    return Response.json({ data: outcome.entry, routerRemoved: outcome.routerRemoved, detail: outcome.detail });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Gagal melepas IP." }, { status: 400 });
   }

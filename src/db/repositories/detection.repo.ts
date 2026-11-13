@@ -107,6 +107,68 @@ export async function findActivity(windowMinutes = 60): Promise<ActivityCounts> 
   };
 }
 
+export async function findDetectionById(id: string): Promise<Detection | null> {
+  const row = await getPrisma().detection.findUnique({ where: { id } });
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    timestamp: row.timestamp.toISOString(),
+    sourceIp: row.sourceIp,
+    sourcePort: row.sourcePort,
+    destinationIp: row.destinationIp,
+    destinationPort: row.destinationPort,
+    classification: assertOneOf(row.classification, CLASSIFICATIONS, "detection.classification"),
+    confidence: row.confidence,
+    action: assertOneOf(row.action, ACTIONS, "detection.action"),
+    status: assertOneOf(row.status, STATUSES, "detection.status"),
+  };
+}
+
+/**
+ * Candidates for the background tarpit worker: reconnaissance flows still marked
+ * Pending, at or above the policy threshold, and without any approval yet. The
+ * `approvals: { none: {} }` relation filter keeps a decided or pending request
+ * from being re-queued, so a rejected detection is never re-requested.
+ */
+export async function findWorkerCandidates(input: {
+  confidenceThreshold: number;
+  limit?: number;
+}): Promise<Detection[]> {
+  const rows = await getPrisma().detection.findMany({
+    where: {
+      action: "Pending",
+      classification: "Reconnaissance",
+      confidence: { gte: input.confidenceThreshold },
+      approvals: { none: {} },
+    },
+    orderBy: { timestamp: "asc" },
+    take: input.limit ?? 25,
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    timestamp: row.timestamp.toISOString(),
+    sourceIp: row.sourceIp,
+    sourcePort: row.sourcePort,
+    destinationIp: row.destinationIp,
+    destinationPort: row.destinationPort,
+    classification: assertOneOf(row.classification, CLASSIFICATIONS, "detection.classification"),
+    confidence: row.confidence,
+    action: assertOneOf(row.action, ACTIONS, "detection.action"),
+    status: assertOneOf(row.status, STATUSES, "detection.status"),
+  }));
+}
+
+/**
+ * Mark a detection as already handled for mitigation, without a new router write.
+ * Used by the worker when the source IP is already under tarpit so the same
+ * detection is not re-queued forever.
+ */
+export async function markDetectionMitigated(id: string, status: "Active" | "Review" = "Review"): Promise<void> {
+  await getPrisma().detection.update({ where: { id }, data: { action: "TARPIT", status } });
+}
+
 export async function findRecentDetections(limit = 20): Promise<Detection[]> {
   const rows = await getPrisma().detection.findMany({
     orderBy: { timestamp: "desc" },

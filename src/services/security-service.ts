@@ -3,19 +3,20 @@ import "server-only";
 import { createApproval, decideApproval, findApprovals } from "@/db/repositories/approval.repo";
 import { findRecentAuditEntries } from "@/db/repositories/audit.repo";
 import { findEvidenceByDetection, saveEvidence, type EvidenceInput } from "@/db/repositories/evidence.repo";
-import { countDetections, findActivity, findRecentDetections, findTrafficSeries, type TrafficPoint } from "@/db/repositories/detection.repo";
+import { countDetections, findActivity, findDetectionById, findRecentDetections, findTrafficSeries, type TrafficPoint } from "@/db/repositories/detection.repo";
 import { findLatestModelMetrics } from "@/db/repositories/ml.repo";
 import { findMitigationPolicy, saveMitigationPolicy } from "@/db/repositories/policy.repo";
 import { findServiceStatuses } from "@/db/repositories/service.repo";
-import { countActiveTarpitEntries, findActiveTarpitEntries, markTarpitReleased, markTarpitVerified } from "@/db/repositories/tarpit.repo";
+import { applyTarpit, countActiveTarpitEntries, findActiveTarpitEntries, findTarpitEntryByIp, markTarpitReleased, markTarpitVerified } from "@/db/repositories/tarpit.repo";
 import { auditEntries as mockAudit, detections as mockDetections, mitigationPolicy as mockPolicy, modelMetrics as mockMetrics, services as mockServices, tarpitEntries as mockTarpit } from "@/data/mock-security";
 import { env } from "@/lib/env";
 import { parsePolicyPayload } from "@/lib/policy";
 import { findRecentRouterSamples, insertRouterSample } from "@/db/repositories/router.repo";
-import { isIpAddress } from "@/lib/validation";
+import { evaluateTarpitGuard } from "@/lib/tarpit-guard";
+import { assertOneOf, isIpAddress } from "@/lib/validation";
 import { fetchModelMetrics, isMlConfigured } from "@/services/ml-service";
 import { getSystemResourceBinary, isMikrotikBinaryConfigured, listTarpitAddressListBinary } from "@/services/mikrotik-binary-service";
-import { isMikrotikConfigured, listTarpitAddressList } from "@/services/mikrotik-service";
+import { addTarpitAddress, isMikrotikConfigured, listTarpitAddressList, removeTarpitAddress } from "@/services/mikrotik-service";
 import type { ApiResult, ApprovalRequest, ApprovalStatus, AuditEntry, ClassificationEvidence, DataSource, Detection, MitigationMode, MitigationPolicy, ModelMetrics, RouterHistoryPoint, RouterResource, SecurityOverview, ServiceStatus, TarpitEntry } from "@/types/security";
 
 /** Local-network stand-in until authentication exists (audit actor). */
@@ -276,14 +277,37 @@ export async function requestApproval(input: { detectionId: string; proposedActi
   return createApproval(input);
 }
 
+export interface ApprovalDecisionOutcome {
+  approval: ApprovalRequest;
+  /** Present only when an approved request triggered a tarpit write. */
+  mitigation: TarpitApplyOutcome | null;
+  /** Why a mitigation did not run, when an approval succeeded but execution did not. */
+  mitigationError?: string;
+}
+
 export async function decideApprovalRequest(
   id: string,
   decision: "approved" | "rejected",
   reason?: string,
   actor: { administrator: string; administratorId?: string } = { administrator: LOCAL_ACTOR },
-): Promise<ApprovalRequest> {
+): Promise<ApprovalDecisionOutcome> {
   if (!env.databaseUrl()) throw new Error("DATABASE_URL tidak dikonfigurasi.");
-  return decideApproval({ id, decision, reason, actor });
+  const approval = await decideApproval({ id, decision, reason, actor });
+  if (decision !== "approved") return { approval, mitigation: null };
+
+  try {
+    const mitigation = await applyTarpitForDetection({
+      detectionId: approval.detectionId,
+      reason,
+      viaApproval: true,
+      actor,
+    });
+    return { approval, mitigation };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Eksekusi tarpit gagal.";
+    console.error("[security-service] tarpit apply after approval failed:", error);
+    return { approval, mitigation: null, mitigationError: message };
+  }
 }
 
 // --- Evidence --------------------------------------------------------------
@@ -300,12 +324,94 @@ export async function storeEvidence(input: EvidenceInput): Promise<Classificatio
   return saveEvidence(input);
 }
 
-// --- Tarpit release / verify ----------------------------------------------
+// --- Dynamic Tarpit write path --------------------------------------------
 
-export async function releaseTarpitIp(ip: string, reason?: string, actor: { administrator: string; administratorId?: string } = { administrator: LOCAL_ACTOR }): Promise<TarpitEntry> {
+export interface TarpitApplyOutcome {
+  entry: TarpitEntry;
+  /** True when RouterOS confirmed the address-list write. */
+  applied: boolean;
+  /** Guardrail decision or router outcome, for display and audit. */
+  detail: string;
+}
+
+export interface TarpitReleaseOutcome {
+  entry: TarpitEntry;
+  /** True when RouterOS confirmed the removal. */
+  routerRemoved: boolean;
+  detail: string;
+}
+
+/**
+ * Apply the Dynamic Tarpit to a detection: check policy guardrails, write the
+ * address-list entry on RouterOS (Design A / A20), then record the entry and its
+ * audit trail. Idempotent, and honest: when the router is unreachable or writes
+ * are disabled the entry is stored as "Pending" with the reason instead of
+ * pretending the mitigation happened.
+ */
+export async function applyTarpitForDetection(input: {
+  detectionId: string;
+  reason?: string;
+  viaApproval?: boolean;
+  actor?: { administrator: string; administratorId?: string };
+}): Promise<TarpitApplyOutcome> {
+  if (!env.databaseUrl()) throw new Error("DATABASE_URL tidak dikonfigurasi.");
+  const actor = input.actor ?? { administrator: LOCAL_ACTOR };
+
+  const detection = await findDetectionById(input.detectionId);
+  if (!detection) throw new Error(`Insiden ${input.detectionId} tidak ditemukan.`);
+  if (!isIpAddress(detection.sourceIp)) throw new Error(`IP sumber tidak valid: ${detection.sourceIp}`);
+
+  const existing = await findTarpitEntryByIp(detection.sourceIp);
+  if (existing && (existing.status === "Active" || existing.status === "Pending")) {
+    return { entry: existing, applied: existing.status === "Active", detail: "IP sudah berada dalam mitigasi tarpit (idempoten)." };
+  }
+
+  const policy = await findMitigationPolicy();
+  const guard = evaluateTarpitGuard({
+    mode: policy.mode,
+    classification: detection.classification,
+    confidence: detection.confidence,
+    confidenceThreshold: policy.confidenceThreshold,
+    activeCount: await countActiveTarpitEntries(),
+    maxActiveEntries: policy.maxActiveEntries,
+    viaApproval: input.viaApproval,
+  });
+  if (!guard.allowed) throw new Error(guard.reason);
+
+  const routerWrite = await addTarpitAddress(policy.addressList, detection.sourceIp);
+  const result = await applyTarpit({
+    ip: detection.sourceIp,
+    detectionId: detection.id,
+    durationMinutes: policy.durationMinutes,
+    addressList: policy.addressList,
+    status: routerWrite.ok ? "Active" : "Pending",
+    actor,
+    reason: input.reason,
+    detail: routerWrite.detail,
+  });
+
+  return { entry: result.entry, applied: routerWrite.ok, detail: routerWrite.detail };
+}
+
+/**
+ * Release an IP: remove the RouterOS address-list entry (Design A / A20) and mark
+ * the stored entry Released with an audit trail. A disabled or unreachable router
+ * is reported honestly rather than treated as success.
+ */
+export async function releaseTarpitIp(
+  ip: string,
+  reason?: string,
+  actor: { administrator: string; administratorId?: string } = { administrator: LOCAL_ACTOR },
+): Promise<TarpitReleaseOutcome> {
   if (!env.databaseUrl()) throw new Error("DATABASE_URL tidak dikonfigurasi.");
   if (!isIpAddress(ip)) throw new Error("Alamat IP tidak valid.");
-  return markTarpitReleased({ ip, reason, actor });
+
+  const existing = await findTarpitEntryByIp(ip);
+  if (!existing) throw new Error(`IP ${ip} tidak ada di daftar tarpit.`);
+
+  const routerWrite = await removeTarpitAddress(existing.addressList, ip);
+  const entry = await markTarpitReleased({ ip, reason, actor });
+  return { entry, routerRemoved: routerWrite.ok, detail: routerWrite.detail };
 }
 
 /**
@@ -331,13 +437,28 @@ export async function verifyTarpitIp(ip: string, actor: { administrator: string;
   return { ip, present, detail: present ? "IP ditemukan di address-list." : "IP tidak ditemukan di address-list." };
 }
 
-// Router write operations remain disabled in the read-only phase. When they
-// are enabled they must validate input, authorize an administrator, apply the
-// change through the backend, and record an audit entry in one transaction.
-export async function requestMitigationMode(_mode: MitigationMode): Promise<never> {
-  throw new Error("Mengubah mode mitigasi dinonaktifkan pada fase baca-saja.");
+/**
+ * Change the mitigation mode. Configuration only: it never touches the router and
+ * is committed together with its audit entry.
+ */
+export async function requestMitigationMode(
+  mode: MitigationMode,
+  actor: { administrator: string; administratorId?: string; reason?: string } = { administrator: LOCAL_ACTOR },
+): Promise<MitigationPolicy> {
+  if (!env.databaseUrl()) throw new Error("DATABASE_URL tidak dikonfigurasi; kebijakan tidak bisa disimpan.");
+  const validated = assertOneOf(mode, ["Automatic", "Manual"] as const, "mode");
+  const current = await findMitigationPolicy();
+  return saveMitigationPolicy(
+    { ...current, mode: validated },
+    { ...actor, reason: actor.reason ?? `Mode mitigasi diubah ke ${validated}.` },
+  );
 }
 
-export async function requestIpRelease(_ip: string): Promise<never> {
-  throw new Error("Melepas IP dinonaktifkan pada fase baca-saja.");
+/** Release an IP from mitigation; thin alias kept for the settings/actions API. */
+export function requestIpRelease(
+  ip: string,
+  reason?: string,
+  actor: { administrator: string; administratorId?: string } = { administrator: LOCAL_ACTOR },
+): Promise<TarpitReleaseOutcome> {
+  return releaseTarpitIp(ip, reason, actor);
 }

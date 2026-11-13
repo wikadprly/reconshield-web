@@ -50,6 +50,10 @@ Data flow: `route/Server Component → src/services/security-service.ts → src/
    MIKROTIK_USERNAME=""
    MIKROTIK_PASSWORD=""
    RECONSHIELD_USE_MOCK_DATA="true"
+   RECONSHIELD_ENABLE_ROUTER_WRITES="false"
+   RECONSHIELD_MAX_ROUTER_WRITES_PER_MINUTE="5"
+   RECONSHIELD_ENABLE_WORKER="false"
+   RECONSHIELD_WORKER_INTERVAL_MS="10000"
    ```
 
    Mock data is used unless `RECONSHIELD_USE_MOCK_DATA` is exactly `"false"`.
@@ -85,11 +89,33 @@ pnpm db:migrate   # Create and apply a migration
 pnpm db:studio    # Open Prisma Studio
 ```
 
-## Read-only phase
+## Dynamic Tarpit write path (A4)
 
-This is currently a **read-only** phase. `requestMitigationMode` and `requestIpRelease` in `src/services/security-service.ts` intentionally throw. Do not wire them to the UI or claim a mitigation happened until writes are implemented and audited. (Architectural decision **A20** is final: **Design A** — tarpit executed by RouterOS `action=tarpit` via REST API, exactly per proposal §6.2 — so the write path is next.)
+The Dynamic Tarpit write path is implemented (decision **A20**, **Design A** — tarpit executed by RouterOS `action=tarpit` via REST API, per proposal §6.2). `applyTarpitForDetection` runs the guardrails in `src/lib/tarpit-guard.ts`, writes the address-list entry through `src/services/mikrotik-service.ts`, and records the entry + audit entry in one transaction (`tarpit.repo.ts`); `releaseTarpitIp` removes the address-list entry and marks the entry Released. `requestMitigationMode` and `requestIpRelease` are now functional wrappers rather than throwing stubs.
+
+Writes are gated by `RECONSHIELD_ENABLE_ROUTER_WRITES` and rate-limited by `RECONSHIELD_MAX_ROUTER_WRITES_PER_MINUTE` (`src/lib/rate-limit.ts`). When the router is absent or writes are disabled, the entry is stored as `Pending` with an honest detail — never claimed as applied.
 
 Database state (verified 27 Okt 2026): the `init` migration (`20261016123221_init`) **has been applied** and `prisma/seed.mjs` **has been run** (9 detections, 5 tarpit entries, 2 model evaluations, 2 service statuses, 0 users).
+
+## Realtime + background mitigation worker (B2/B3, 13 Nov 2026)
+
+Views poll through `useApiResult(path, { refreshMs })` — Dashboard, Threat Logs,
+Active Tarpit, Approvals and the topbar notifications refresh every 5–10 s without a
+page reload. There is no SSE/WebSocket; polling is the agreed mechanism.
+
+Set `RECONSHIELD_ENABLE_WORKER="true"` to start the background worker
+(`src/services/tarpit-worker.ts`, launched from `src/instrumentation.ts`). Each tick
+looks for `Reconnaissance` detections still `Pending`, at/above the policy threshold,
+with no approval yet:
+
+- **mode Automatic** → `applyTarpitForDetection` (guardrail + rate limit still apply);
+- **mode Manual** → creates a pending approval, which the Approval Center picks up.
+
+It is idempotent: a detection that already has an approval is never re-queued, and a
+source IP already under tarpit has its detection marked `TARPIT` instead of being
+written twice. The router gate (`RECONSHIELD_ENABLE_ROUTER_WRITES`) and the per-minute
+write limit still apply, so a disabled router yields an honest `Pending` entry.
+`RECONSHIELD_WORKER_INTERVAL_MS` (default 10000, clamped 2000–300000) sets the cadence.
 
 ## Security
 

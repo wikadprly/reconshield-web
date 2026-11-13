@@ -62,6 +62,100 @@ export async function countActiveTarpitEntries(): Promise<number> {
   return getPrisma().tarpitEntry.count({ where: { status: { in: ["Active", "Pending"] } } });
 }
 
+export interface ApplyTarpitInput {
+  ip: string;
+  detectionId?: string;
+  durationMinutes: number;
+  addressList: string;
+  /** "Active" once the router confirmed the write, "Pending" when it is intent only. */
+  status: "Active" | "Pending";
+  actor: { administrator: string; administratorId?: string };
+  reason?: string;
+  /** Router outcome / guardrail note stored on the audit entry. */
+  detail?: string;
+}
+
+export interface ApplyTarpitResult {
+  entry: TarpitEntry;
+  /** False when the IP was already under mitigation (idempotent no-op). */
+  created: boolean;
+}
+
+/**
+ * Record a Dynamic Tarpit intent or confirmed application and its audit entry in
+ * one transaction. Router-side changes are done by the caller (the database must
+ * not be the one that lies about a router write). Idempotent: an IP already under
+ * mitigation is returned untouched so repeat detections never double-apply.
+ */
+export async function applyTarpit(input: ApplyTarpitInput): Promise<ApplyTarpitResult> {
+  const prisma = getPrisma();
+
+  return prisma.$transaction(async (tx) => {
+    const current = await tx.tarpitEntry.findUnique({ where: { ip: input.ip } });
+
+    if (current && (current.status === "Active" || current.status === "Pending")) {
+      return { entry: toTarpit(current), created: false };
+    }
+
+    const at = new Date();
+    const expiresAt = new Date(at.getTime() + input.durationMinutes * 60_000);
+    const duration = `${input.durationMinutes} menit`;
+
+    const saved = current
+      ? await tx.tarpitEntry.update({
+          where: { ip: input.ip },
+          data: {
+            detectedAt: at,
+            duration,
+            durationMinutes: input.durationMinutes,
+            expiresAt,
+            addressList: input.addressList,
+            status: input.status,
+            releasedAt: null,
+            verifiedAt: null,
+            detectionId: input.detectionId ?? current.detectionId,
+          },
+        })
+      : await tx.tarpitEntry.create({
+          data: {
+            ip: input.ip,
+            detectedAt: at,
+            duration,
+            durationMinutes: input.durationMinutes,
+            expiresAt,
+            addressList: input.addressList,
+            status: input.status,
+            detectionId: input.detectionId ?? null,
+          },
+        });
+
+    await tx.auditEntry.create({
+      data: {
+        timestamp: at,
+        administrator: input.actor.administrator,
+        administratorId: input.actor.administratorId ?? null,
+        previousMode: current?.status ?? "none",
+        newMode: input.status,
+        action: "tarpit_apply",
+        target: input.ip,
+        reason: input.detail ?? input.reason ?? null,
+      },
+    });
+
+    if (input.detectionId) {
+      await tx.detection.update({
+        where: { id: input.detectionId },
+        data: {
+          action: "TARPIT",
+          status: input.status === "Active" ? "Active" : "Review",
+        },
+      });
+    }
+
+    return { entry: toTarpit(saved), created: true };
+  });
+}
+
 /**
  * Release an IP from tarpit and record the audit entry in one transaction.
  * Router-side removal is done by the caller; this touches the database only.

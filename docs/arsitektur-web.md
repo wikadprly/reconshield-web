@@ -1,19 +1,19 @@
 # Arsitektur & Perkembangan Web ReconShield
 
-> **Terakhir diperbarui:** 12 November 2026
+> **Terakhir diperbarui:** 13 November 2026 (implementasi write path A4)
 > **Tujuan dokumen:** menjadi patokan tunggal untuk pengerjaan web — apa yang sudah ada, dari mana asalnya di proposal, dan bagaimana web terhubung ke `reconshield-ml` serta MikroTik.
 
 ---
 
 ## 1. Ringkasan dalam satu paragraf
 
-Web ReconShield adalah **dashboard admin** untuk insiden reconnaissance. Ia **tidak** melakukan inferensi sendiri: klasifikasi datang dari pipeline Python (`reconshield-ml`), hasilnya dibaca web dari database MySQL, lalu admin memutuskan mitigasi (otomatis/manual). Eksekusi ke router **belum** menjadi tanggung jawab web sepenuhnya: web menyiapkan state, guardrail, dan audit; perangkat MikroTik diuji terpisah.
+Web ReconShield adalah **dashboard admin** untuk insiden reconnaissance. Ia **tidak** melakukan inferensi sendiri: klasifikasi datang dari pipeline Python (`reconshield-ml`), hasilnya dibaca web dari database MySQL, lalu admin memutuskan mitigasi (otomatis/manual). **Write path A4 sudah diimplementasikan**: web mengeksekusi tarpit ke RouterOS (address-list `action=tarpit`, Design A / keputusan A20) melalui gerbang + rate-limit + guardrail, lalu mencatat entri dan audit dalam satu transaksi. Uji nyata di perangkat hAP lite 6.48.6 masih terpisah.
 
 ```
 MikroTik (NetFlow)  →  reconshield-ml (RF)  →  MySQL  →  reconshield-web  →  Admin
                                                      ↑                         ↓
                                                      └── audit / policy ────────┘
-         (masa depan)  web ── gate ──→ RouterOS API ──→ address-list / action=tarpit
+                    web ── guardrail + gate + rate-limit ──→ RouterOS API ──→ address-list / action=tarpit
 ```
 
 ---
@@ -22,9 +22,10 @@ MikroTik (NetFlow)  →  reconshield-ml (RF)  →  MySQL  →  reconshield-web  
 
 | Butir proposal (§6.2) | Wujud di web | Status |
 |---|---|---|
-| 7–8. Generate aturan Dynamic Tarpit + RouterOS REST | `mikrotik-service.ts`, gerbang `RECONSHIELD_ENABLE_ROUTER_WRITES` | Kode siap, uji perangkat belum |
+| 6. Keputusan otomatis → mitigasi | `services/tarpit-worker.ts` (+ `src/instrumentation.ts`): Automatic → tarpit, Manual → approval; opt-in `RECONSHIELD_ENABLE_WORKER` | Selesai (uji lab menyusul) |
+| 7–8. Generate aturan Dynamic Tarpit + RouterOS REST | `mikrotik-service.ts` (add/remove address-list) + guardrail `tarpit-guard.ts` + rate-limit `rate-limit.ts`, gerbang `RECONSHIELD_ENABLE_ROUTER_WRITES` | Kode selesai, uji perangkat belum |
 | 9. Catat log insiden ke database | `detections`, `evidence`, `audit_entries` | Selesai |
-| 10. Web dashboard monitoring | `/dashboard`, `/threat-logs`, `/active-tarpit`, `/approvals`, `/ml-performance`, `/settings` | Selesai (belum realtime) |
+| 10. Web dashboard monitoring | `/dashboard`, `/threat-logs`, `/active-tarpit`, `/approvals`, `/ml-performance`, `/settings` | Selesai (polling 5–10 dtk, B2) |
 | 11. Visualisasi log intervensi & alert | tabel insiden, audit, notifikasi topbar (dari DB) | Selesai |
 | 12. Efektivitas tarpit | belum — butuh instrumen A9 | Belum (bagian MikroTik) |
 | 14. Database MySQL | MySQL 8.4 + Prisma 7 (`@prisma/adapter-mariadb`) | Selesai |
@@ -54,9 +55,10 @@ MikroTik (NetFlow)  →  reconshield-ml (RF)  →  MySQL  →  reconshield-web  
 | `GET /api/evidence/[detectionId]` | Snapshot bukti klasifikasi |
 | `GET/PUT /api/settings` | Kebijakan mitigasi (baca/ubah + audit) |
 | `GET/POST /api/approvals` | Daftar/buat permintaan persetujuan |
-| `PATCH /api/approvals/[id]` | Setujui/tolak + audit |
+| `PATCH /api/approvals/[id]` | Setujui/tolak + audit; approve mengeksekusi tarpit (A4) |
 | `GET /api/tarpit` | Daftar tarpit |
-| `DELETE /api/tarpit/[ip]` | Release (DB + audit) |
+| `POST /api/tarpit` | Terapkan tarpit untuk satu `detectionId` (A4) |
+| `DELETE /api/tarpit/[ip]` | Release: hapus address-list RouterOS + status DB + audit |
 | `POST /api/tarpit/[ip]` | Verifikasi terhadap address-list |
 | `GET /api/system`, `/api/system/history` | Resource router + riwayat CPU/memori |
 | `GET /api/health` | configured + reachable + latency |
@@ -91,9 +93,13 @@ MikroTik (NetFlow)  →  reconshield-ml (RF)  →  MySQL  →  reconshield-web  
 | ID insiden | `INC-####` dialokasikan dengan `GET_LOCK` (aman multi-writer) |
 | Metrik | `training/sync_metrics_db.py` menulis `model_evaluations` + `feature_importances` |
 | Opsional | `PYTHON_ML_API_URL` dipakai web hanya untuk membaca `/model/metrics` bila DB kosong |
-| Bukti klasifikasi | Python **belum** menulis `evidence`; saat ini evidence diisi dari seed. Ini titik integrasi berikutnya |
+| Bukti klasifikasi | Python **menulis `evidence`** — satu baris per insiden, dalam transaksi yang sama dengan `detections` (16 fitur, `modelName`/`modelVersion` dari nama artefak, `policyVersion`/`policySnapshot` dari `mitigation_settings`) |
 
-**Yang perlu disepakati dengan bagian ML:** siapa yang menulis `evidence` (pipeline atau web), dan dari mana `policyVersion` diambil.
+**Penulis `evidence` (diputuskan):** pipeline ML. `detect.py` mengisi `features` (16 fitur
+per-flow), `modelName`/`modelVersion` (dari nama file `.joblib` yang di-serve), dan
+`policyVersion` (`policy-YYYY-MM-DD` dari `mitigation_settings.updatedAt`) + `policySnapshot`
+(mode, ambang, durasi, batas entri, address-list). Web hanya membaca; seed tetap mengisi
+contoh untuk data demo.
 
 ---
 
@@ -105,7 +111,7 @@ MikroTik (NetFlow)  →  reconshield-ml (RF)  →  MySQL  →  reconshield-web  
 |---|---|---|
 | Baca address-list | API biner 8728 (`node-routeros`) | Ada, belum diuji perangkat |
 | Baca `/system/resource` | API biner 8728 | Ada, dipakai health check |
-| Tambah/hapus address-list | REST | Ada, **digerbangi** `RECONSHIELD_ENABLE_ROUTER_WRITES` |
+| Tambah/hapus address-list | REST | Ada, **digerbangi** `RECONSHIELD_ENABLE_ROUTER_WRITES` + rate-limit `RECONSHIELD_MAX_ROUTER_WRITES_PER_MINUTE` |
 
 **Pemisahan tanggung jawab:**
 
@@ -126,7 +132,8 @@ Panduan langkah demi langkah: `docs/handoff-mikrotik.md`.
 4. **Bukti, bukan alasan native.** Evidence = snapshot fitur + confidence + versi; bukan penjelasan internal Random Forest.
 5. **Tarpit bukan pembakar CPU.** Klaim aman: menurunkan laju dan efisiensi reconnaissance.
 6. **Selisih testbed (A19).** Proposal: CHR + RouterOS v7; lab: hAP lite + 6.48.6.
-7. **Belum realtime.** Data dibaca saat render/refetch; belum polling/SSE.
+7. **Realtime = polling.** Sejak 13 Nov (B2) view hidup memakai `useApiResult(path, { refreshMs })` (5–10 dtk) — belum SSE/WebSocket.
+8. **Worker mitigasi otomatis = opt-in.** Sejak 13 Nov (B3) `services/tarpit-worker.ts` dipulai dari `src/instrumentation.ts` hanya bila `RECONSHIELD_ENABLE_WORKER="true"`; tetap tunduk pada guardrail + `RECONSHIELD_ENABLE_ROUTER_WRITES` + batas tulis/menit. Mode Manual membuat approval, bukan mengeksekusi.
 
 ---
 
@@ -135,10 +142,11 @@ Panduan langkah demi langkah: `docs/handoff-mikrotik.md`.
 1. Admin membuka dashboard → angka dari agregat DB (`scoped:false` bila dari DB).
 2. Insiden masuk dari pipeline ML → tampil di Log Ancaman.
 3. Admin membuka detail → melihat **bukti klasifikasi** 16 fitur.
-4. Mode Manual → insiden masuk **Pusat Persetujuan** → admin setujui/tolak (audit).
+4. Mode Manual → insiden masuk **Pusat Persetujuan** → admin setujui/tolak (audit); approve mengeksekusi tarpit ke router.
 5. Mitigasi aktif → tampil di Tarpit Aktif beserta `expiresAt`.
-6. Admin dapat **Verifikasi** (cocokkan dengan router) dan **Lepas** (status DB + audit).
-7. Laporan PDF diunduh untuk lampiran/bimbingan.
+6. Admin dapat **Verifikasi** (cocokkan dengan router) dan **Lepas** (hapus address-list + status DB + audit).
+7. Dari Log Ancaman, insiden reconnaissance dapat dimitigasi manual (`POST /api/tarpit`).
+8. Laporan PDF diunduh untuk lampiran/bimbingan.
 
 ---
 
@@ -146,11 +154,11 @@ Panduan langkah demi langkah: `docs/handoff-mikrotik.md`.
 
 | Prioritas | Item | Pemilik |
 |---|---|---|
-| 1 | Uji `action=tarpit` + gerbang write | bagian MikroTik |
+| 1 | Uji `action=tarpit` + gerbang write (BB-D9) | bagian MikroTik |
 | 2 | BB-N (Nmap/Hping3) + A9 (angka efektivitas) | bagian MikroTik |
-| 3 | Pipeline ML menulis `evidence` | ML/web bersama |
-| 4 | Test web (Vitest) untuk policy/validasi | web |
-| 5 | Realtime (polling/SSE) + alert | web |
+| 3 | ~~Pipeline ML menulis `evidence`~~ ✅ 13 Nov — `pipeline/detect.py` | ML |
+| 4 | ~~Loop otomatis: worker detection `Pending` + auto mode~~ ✅ 13 Nov — `services/tarpit-worker.ts` (B3) | web |
+| 5 | ~~Realtime polling~~ ✅ 13 Nov — `useApiResult` `refreshMs` (B2); SSE/alert masih opsi | web |
 | 6 | Auth/token admin (opsional, setelah bimbingan) | web |
 
 ---
@@ -161,7 +169,7 @@ Panduan langkah demi langkah: `docs/handoff-mikrotik.md`.
 # MySQL harus hidup (Laragon)
 corepack pnpm dev
 corepack pnpm lint      # tsc --noEmit
-corepack pnpm test      # vitest run (25 test: policy, validasi, label, format)
+corepack pnpm test      # vitest run (36 test: policy, validasi, label, format, rate-limit, tarpit-guard)
 corepack pnpm build
 corepack pnpm db:generate
 corepack pnpm db:migrate

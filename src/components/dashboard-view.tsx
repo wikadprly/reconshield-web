@@ -18,7 +18,7 @@ const RANGE_LABELS: Record<Range, string> = { "1h": "1 Jam", "24h": "24 Jam", "7
 export default function DashboardView() {
   const [range, setRange] = useState<Range>("24h");
   // 20s polling keeps the "current status" panel live without a manual reload.
-  const { result, loading, error, refresh } = useApiResult<SecurityOverview>("/api/overview", { refreshMs: 60_000 });
+  const { result, loading, error, refresh } = useApiResult<SecurityOverview>("/api/overview", { refreshMs: 10_000 });
   const traffic = useApiResult<{ time: string; normal: number; reconnaissance: number }[]>(`/api/traffic?range=${range}`);
   const refreshAll = () => { refresh(); traffic.refresh(); };
 

@@ -27,4 +27,15 @@ export const env = {
     const parsed = Number(read("RECONSHIELD_MAX_ROUTER_WRITES_PER_MINUTE") ?? "5");
     return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 30) : 5;
   },
+  /**
+   * The background tarpit worker is opt-in. When enabled it polls detections and
+   * turns them into mitigations (Automatic) or approval requests (Manual),
+   * still subject to every guardrail and to `routerWritesEnabled`.
+   */
+  workerEnabled: () => read("RECONSHIELD_ENABLE_WORKER") === "true",
+  workerIntervalMs: () => {
+    const parsed = Number(read("RECONSHIELD_WORKER_INTERVAL_MS") ?? "10000");
+    if (!Number.isFinite(parsed) || parsed <= 0) return 10_000;
+    return Math.min(Math.max(parsed, 2_000), 300_000);
+  },
 };

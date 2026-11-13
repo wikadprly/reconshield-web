@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Search, Shield, SlidersHorizontal } from "lucide-react";
+import { Download, Search, Shield, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
 import DetectionTable from "@/components/detection-table";
 import { Modal } from "@/components/modal";
@@ -16,7 +16,7 @@ const ALL_CLASSIFICATIONS = "Semua klasifikasi";
 const ALL_ACTIONS = "Semua tindakan";
 
 export default function ThreatLogsView() {
-  const { result, loading, error } = useApiResult<Detection[]>("/api/detections?limit=200");
+  const { result, loading, error } = useApiResult<Detection[]>("/api/detections?limit=200", { refreshMs: 10_000 });
   const detections = result?.data ?? [];
   const [query, setQuery] = useState("");
   const [classification, setClassification] = useState(ALL_CLASSIFICATIONS);
@@ -26,12 +26,15 @@ export default function ThreatLogsView() {
   const [selected, setSelected] = useState<Detection | null>(null);
   const [evidence, setEvidence] = useState<ClassificationEvidence | null>(null);
   const [evidenceState, setEvidenceState] = useState<"idle" | "loading" | "missing" | "error">("idle");
+  const [applying, setApplying] = useState(false);
+  const [mitigationNote, setMitigationNote] = useState<{ ok: boolean; message: string } | null>(null);
   const pageSize = 5;
 
   async function openDetail(row: Detection) {
     setSelected(row);
     setEvidence(null);
     setEvidenceState("loading");
+    setMitigationNote(null);
     try {
       const response = await fetch(`/api/evidence/${encodeURIComponent(row.id)}`, { cache: "no-store" });
       const body = (await response.json()) as { data?: ClassificationEvidence | null };
@@ -44,6 +47,30 @@ export default function ThreatLogsView() {
       }
     } catch {
       setEvidenceState("error");
+    }
+  }
+
+  async function applyMitigation(row: Detection) {
+    setApplying(true);
+    setMitigationNote(null);
+    try {
+      const response = await fetch("/api/tarpit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ detectionId: row.id, reason: "Mitigasi manual dari log ancaman" }),
+      });
+      const body = (await response.json()) as { applied?: boolean; detail?: string; error?: string };
+      if (!response.ok) throw new Error(body.error ?? "Gagal menerapkan tarpit.");
+      setMitigationNote({
+        ok: true,
+        message: body.applied
+          ? `IP ditambahkan ke address-list RouterOS. ${body.detail ?? ""}`.trim()
+          : `Tercatat sebagai Pending: ${body.detail ?? "RouterOS belum terkonfirmasi"}.`,
+      });
+    } catch (error) {
+      setMitigationNote({ ok: false, message: error instanceof Error ? error.message : "Gagal menerapkan tarpit." });
+    } finally {
+      setApplying(false);
     }
   }
 
@@ -110,6 +137,12 @@ export default function ThreatLogsView() {
           <div className="table-scroll"><table><thead><tr><th>Fitur</th><th>Nilai</th></tr></thead><tbody>{Object.entries(evidence.features).map(([name, value]) => <tr key={name}><td>{labelFeature(name)}</td><td>{Number(value).toFixed(4)}</td></tr>)}</tbody></table></div>
         </>}
       </div>
-      <p className="detail-note">Bukti klasifikasi adalah snapshot fitur, keyakinan, dan versi model/kebijakan — bukan klaim tentang alasan internal Random Forest. Tidak ada klaim tindakan router selain yang dilaporkan backend.</p></Modal>}
+      <p className="detail-note">Bukti klasifikasi adalah snapshot fitur, keyakinan, dan versi model/kebijakan — bukan klaim tentang alasan internal Random Forest. Tidak ada klaim tindakan router selain yang dilaporkan backend.</p>
+      {selected.classification === "Reconnaissance" && selected.action !== "TARPIT" && <div className="evidence-block">
+        <h3>Mitigasi Dynamic Tarpit</h3>
+        <p className="detail-note">Terapkan tarpit untuk IP ini. Ambang keyakinan, batas entri aktif, dan status write path RouterOS diperiksa sebelum eksekusi.</p>
+        <Button disabled={applying} onClick={() => applyMitigation(selected)}><ShieldCheck size={15} />{applying ? "Memproses..." : "Terapkan Dynamic Tarpit"}</Button>
+        {mitigationNote && <p className={mitigationNote.ok ? "detail-note" : "form-error"}>{mitigationNote.message}</p>}
+      </div>}</Modal>}
   </div>;
 }

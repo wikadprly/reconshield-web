@@ -23,7 +23,7 @@ const STATUS_TONE: Record<ApprovalStatus, "warning" | "success" | "danger" | "ne
 };
 
 export default function ApprovalsView() {
-  const { result, loading, error, refresh } = useApiResult<ApprovalRequest[]>("/api/approvals");
+  const { result, loading, error, refresh } = useApiResult<ApprovalRequest[]>("/api/approvals", { refreshMs: 10_000 });
   const approvals = result?.data ?? [];
 
   const [selected, setSelected] = useState<ApprovalRequest | null>(null);
@@ -31,19 +31,32 @@ export default function ApprovalsView() {
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function submitDecision() {
     if (!selected || !decision) return;
     setSaving(true);
     setSaveError(null);
+    setNotice(null);
     try {
       const response = await fetch(`/api/approvals/${selected.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ decision, reason: reason.trim() || undefined }),
       });
-      const body = (await response.json()) as { error?: string };
+      const body = (await response.json()) as {
+        mitigation?: { applied: boolean; detail: string } | null;
+        mitigationError?: string;
+        error?: string;
+      };
       if (!response.ok) throw new Error(body.error ?? "Gagal memutuskan persetujuan.");
+      if (decision === "approved") {
+        setNotice(
+          body.mitigation?.applied
+            ? `Mitigasi dijalankan: ${body.mitigation.detail}`
+            : `Persetujuan tercatat, tetapi mitigasi belum terkonfirmasi: ${body.mitigationError ?? body.mitigation?.detail ?? "menunggu write path RouterOS"}.`,
+        );
+      }
       setSelected(null);
       setDecision(null);
       setReason("");
@@ -67,6 +80,7 @@ export default function ApprovalsView() {
       </div>
       <Badge tone={pendingCount > 0 ? "warning" : "success"} dot>{pendingCount} menunggu keputusan</Badge>
     </div>
+    {notice && <div className="data-state loading">{notice}</div>}
     <Card>
       <CardHeader title="Permintaan Persetujuan" subtitle="Keputusan tercatat pada log audit" />
       <div className="table-scroll">
@@ -97,11 +111,11 @@ export default function ApprovalsView() {
       onConfirm={saving ? () => {} : submitDecision}
     >
       <p>{decision === "approved"
-        ? "Persetujuan dicatat dan insiden ditandai siap dimitigasi. Eksekusi ke RouterOS tetap menunggu write path (A4) diaktifkan."
+        ? "Persetujuan dicatat lalu mitigasi dijalankan: IP ditambahkan ke address-list RouterOS (bila write path aktif) dan dicatat pada log audit."
         : "Penolakan dicatat pada log audit; tidak ada mitigasi yang dijalankan."}</p>
       <label className="field"><span>Alasan (opsional)</span><input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={200} placeholder="Contoh: false positive, IP internal" /></label>
       {saveError && <p className="form-error">{saveError}</p>}
-      <div className="modal-info"><ShieldQuestion size={17} />Keputusan ini tidak mengubah konfigurasi router.</div>
+      <div className="modal-info"><ShieldQuestion size={17} />Bila RouterOS belum dikonfigurasi, persetujuan tetap tercatat dan mitigasi dilaporkan belum terkonfirmasi.</div>
     </Modal>}
   </div>;
 }
